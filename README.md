@@ -1,5 +1,2 @@
-# mousevsfish
+## Comparison of brain transcriptomes from 5XFAD mice and fAD-like zebrafish
 
-A [workflowr][] project.
-
-[workflowr]: https://github.com/jdblischak/workflowr
