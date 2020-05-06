@@ -1,0 +1,385 @@
+---
+title: "Import 5XFAD Mouse Data"
+author: "Nhi Hin"
+date: "2020-05-04"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r load-packages, include=FALSE}
+library(here)
+library(magrittr)
+library(GEOquery)
+library(tibble)
+library(readr)
+library(dplyr)
+library(limma)
+library(edgeR)
+library(UpSetR)
+library(ggplot2)
+library(GEOquery)
+theme_set(theme_bw())
+```
+
+## 0. Introduction
+
+- In this file we will import in the existing publically available mouse 
+5XFAD RNA-seq datasets directly from GEO and have a look at the datasets. 
+If the PCAs look decent then I will re-process the raw fastqs to be consistent 
+with our zebrafish dataset. 
+
+## 1. Unknown age, mouse hippocampus, 5XFAD and WT
+
+- The publication is not out yet, so there aren't many details. Age of 
+mice is unknown, so we can't use this dataset for now. Will email authors 
+to ask them for the age.
+
+```{r eval=FALSE}
+geo <- getGEO("GSE115437", GSEMatrix = TRUE)
+geo$GSE115437_series_matrix.txt.gz@phenoData %>% pData %>% as_tibble
+```
+
+
+## 2. [1,2 and 4 months, mouse hippocampus, 5XFAD only](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE97113)
+
+- They don't have WT controls in this dataset, although it's the only one 
+I could find that includes these earlier age groups which are likely to be 
+more comparable to our zebrafish. 
+
+- Will try seeing where they lie on a PCA with other 5XFAD datasets to see 
+if it's possible to combine them or generally how comparable they are. 
+
+- **Platform**: Illumina HiSeq 2500
+
+```{r}
+# Retrieve the sample metadata from GEO
+geo <- getGEO("GSE97113", GSEMatrix = TRUE)
+samples <- geo$GSE97113_series_matrix.txt.gz@phenoData %>%
+  pData %>% 
+  as_tibble %>% 
+  dplyr::select(title, description,
+                geo_accession,
+                starts_with("characteristics")) %>%
+  dplyr::rename(genotype = characteristics_ch1,
+                id = description,
+                sex = characteristics_ch1.1,
+                age = characteristics_ch1.2,
+                tissue = characteristics_ch1.3) %>%
+  dplyr::mutate(genotype = "5XFAD" %>% as.factor,
+                sex = gsub(x=sex, pattern="Sex: ", replacement = "") %>% 
+                  as.factor,
+                age = gsub(x=age, pattern="age: | Month", replacement = "") %>% 
+                  as.factor,
+                tissue = "Hippocampus" %>% as.factor,
+                title = gsub(x=title,pattern=" ", replacement="_"))
+
+# Downloaded counts from GEO
+counts <- read_csv(here("data/datasets/mouse/GSE97113_5XFAD_counts.csv"))
+
+genes <- counts %>% dplyr::select(Gene.ID, Associated.Gene.Name, Description)
+counts <- counts %>% as.data.frame %>% column_to_rownames("Gene.ID") %>% 
+  dplyr::select(-Associated.Gene.Name, -Description)
+
+colnames(counts)==samples$id # Check ordering of samples is the same
+
+# Set the sample names in counts matrix to readable name
+colnames(counts)=samples$title
+```
+
+- Create DGEList to store counts, samples, and genes.
+
+```{r}
+dge_GSE97113 <- DGEList(counts=counts, 
+                        samples = samples,
+                        genes = genes, remove.zeros = TRUE)
+```
+
+- Quick PCA to check samples and their similarity to each other. 
+
+```{r}
+pca <- prcomp(t(cpm(dge_GSE97113, log = TRUE)))
+
+shape_factor <- paste0(samples$sex, "_", samples$age, "_mths") %>% 
+  factor(levels = unique(.))
+
+pca_plot_GSE97113 <- pca$x %>% magrittr::extract(, c("PC1", "PC2")) %>%
+  set_colnames(c("PCa", "PCb")) %>%
+  as.data.frame %>%
+  rownames_to_column("samples") %>%
+  left_join((dge_GSE97113$samples %>% rownames_to_column("samples")), by="samples") %>%
+  ggplot(aes(x=PCa, y = PCb, shape = sex, colour = age)) +
+  geom_point(shape = 1,size = 3.3)+
+  geom_point(alpha = 1,size=3) + 
+  scale_shape_manual(values = c(1,16)) + 
+  #scale_shape_manual(values = c(0,15,1,16,2,17),
+  #                   labels = levels(shape_factor)) +
+  labs(x = "Principal Component 1 (11.5%)", 
+       y = "Principal Component 2 (9.4%)",
+       colour = "Age in\nmonths", 
+       shape = "Sex") +
+  theme(aspect.ratio = 1)
+  
+pca_plot_GSE97113
+```
+
+- Overall there is not a huge difference (PC1 only accounts for 11.5% 
+variation). However, the 4-month-olds separate out from the 1-2 month olds. 
+This makes sense as they are quite a bit older. There is also some noticeable
+separation across PC2 of the male and female samples. 
+
+- Dataset looks good, I will re-process the raw data for this one. 
+
+```{r engine='bash'}
+split -l 1 ena download --additional-suffix=.txt
+count=1; for file in *.txt; do mv $file  ${count}_${file}; count=$(expr $count + 1);  done
+```
+
+
+## 3. [Frontal cortex, 6 and 11 months (3 biological replicates + WT)](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE142633)
+
+- The counts provided for this one has been estimated at the transcript level, 
+although the authors have provided counts at gene level. 
+
+```{r}
+counts <- read_tsv(here("data/datasets",
+                        "/mouse/GSE142633_RAW_transcripts.txt")) %>%
+  set_colnames(gsub(x=colnames(.), pattern ="_.*$", replacement = ""))
+  
+genes <- read_tsv(here("data/datasets/mouse", 
+                       "GSM4233218_WT_806_6M_FC.genes.results.txt")) %>%
+  dplyr::select(gene_id, `transcript_id(s)`)
+```
+
+- Retrieve sample info
+
+```{r}
+geo <- getGEO("GSE142633", GSEMatrix = TRUE)
+samples <- geo$GSE142633_series_matrix.txt.gz@phenoData %>% 
+  pData %>%
+  as_tibble %>% 
+  dplyr::select(title, description,
+                geo_accession,
+                starts_with("characteristics")) %>%
+  dplyr::rename(genotype = characteristics_ch1,
+                tissue = characteristics_ch1.1,
+                age = characteristics_ch1.2) %>%
+  dplyr::mutate(genotype = gsub(x=genotype, pattern="strain: ", 
+                                replacement = "") %>% as.factor,
+                genotype = gsub(x=genotype, pattern="B6SJLF1/J",
+                                replacement = "WT"),
+                tissue = gsub(x=tissue, pattern="tissue: | of brain", 
+                              replacement = "") %>% 
+                  as.factor,
+                age = gsub(x=age, pattern="age: | months", replacement = "") %>% 
+                  as.factor,
+                title = gsub(x=title,pattern=" mRNAseq", replacement=""),
+                rep = c(1:4, 1:3, 1:3, 1:3),
+                description = paste(genotype, age, rep, sep="_")) 
+
+colnames(counts)==samples$geo_accession # All TRUE
+colnames(counts) <- samples$description
+counts %<>% as.data.frame %>% set_rownames(genes$gene_id)
+```
+
+
+- Create DGEList to store counts, samples, and genes.
+
+```{r}
+dge_GSE142633 <- DGEList(counts=counts, 
+                        samples = samples,
+                        genes = genes, remove.zeros = TRUE)
+```
+
+- Quick PCA to check samples and their similarity to each other. 
+
+```{r}
+pca <- prcomp(t(cpm(dge_GSE142633, log = TRUE)))
+
+shape_factor <- paste0(samples$genotype, "_", samples$age, "_mths") %>% 
+  factor(levels = unique(.))
+
+pca_plot_GSE142633 <- pca$x %>% magrittr::extract(, c("PC1", "PC2")) %>%
+  set_colnames(c("PCa", "PCb")) %>%
+  as.data.frame %>%
+  rownames_to_column("samples") %>%
+  left_join((dge_GSE142633$samples %>% rownames_to_column("samples")), by="samples") %>%
+  ggplot(aes(x=PCa, y = PCb, shape = genotype, colour = as.factor(age))) +
+  geom_point(shape = 1,size = 3.3)+
+  geom_point(alpha = 1,size=3) + 
+  scale_shape_manual(values = c(1,16)) + 
+  #scale_shape_manual(values = c(0,15,1,16,2,17),
+  #                   labels = levels(shape_factor)) +
+  labs(x = "Principal Component 1 (19.4%)", 
+       y = "Principal Component 2 (13.2%)",
+       colour = "Age in\nmonths", 
+       shape = "Genotype") +
+  theme(aspect.ratio = 1)
+  
+pca_plot_GSE142633
+```
+
+- Samples separate cleanly by age and genotype. Age is the leading source 
+of variation (PC1) while genotype is across PC2. Dataset is good to proceed, 
+and I will download and re-process the raw data. 
+
+## 4. 3,6 and 12 months, mouse cortex
+
+- This dataset was used in the IRE analysis paper. Here we import the 
+sample table below. 
+
+```{r}
+samples <- getGEO(filename = here::here("data", "datasets", "mouse",
+                                        "GSE140286_series_matrix.txt"), 
+                  getGPL = FALSE) %>%
+  phenoData %>%
+  pData %>%
+  as_tibble
+```
+
+- Keep relevant columns:
+
+```{r}
+samples %<>% dplyr::select(description.1,
+                          title, 
+                          starts_with("age"),
+                          starts_with("genotype"),
+                          starts_with("tissue"),
+                          contains("Sample_characteristics_ch1"))  %>% 
+    dplyr::rename(id = description.1,
+                name = title,
+                age = `age:ch1`,
+                genotype = `genotype:ch1`,
+                tissue = `tissue:ch1`) %>%
+  dplyr::mutate(age = gsub(x = age, 
+                           pattern = " months", 
+                           replacement = ""),
+                age = as.numeric(age)) %>%
+  dplyr::mutate(genotype = gsub(x = name, 
+                                pattern = "_(.)*$", 
+                                replacement = ""),
+                genotype = factor(genotype, 
+                                  levels = c("5XFAD","WT")))
+
+samples
+```
+
+- Import counts matrix:
+
+```{r}
+counts <- here("data", "datasets", "mouse",
+               "GSE140286_FAD_time_series_rnaseq_raw_count.txt") %>%
+  read_tsv
+
+counts
+
+sampleNames <- counts[,-c(1)] %>% colnames
+sampleNames
+```
+
+- Check the "id" column in `samples` corresponds to the `sampleNames`. 
+```{r}
+samples$id %in% sampleNames # Are all samples in sample table present in counts samples?
+samples$id == sampleNames # Is the order the same?
+```
+
+- The ordering of samples isn't the same across the sample table and the 
+counts matrix, so we will re-order the rows in `samples` 
+so that they match the order of `sampleNames` 
+from the `counts` matrix. 
+```{r}
+samples <- samples %>% 
+  as.data.frame %>%
+  set_rownames(.$id) %>%
+  magrittr::extract(sampleNames, )
+```
+
+```{r}
+samples
+samples$id == sampleNames # Confirm order matches now
+```
+
+- Extract gene IDs
+
+```{r}
+genes <- data.frame(ensembl_gene_id = counts$Gene)
+```
+
+```{r}
+counts %<>% column_to_rownames("Gene")
+```
+
+```{r}
+colnames(counts) <- samples$name
+```
+
+
+- Create DGEList
+
+```{r}
+dge_GSE140286 <- DGEList(
+  counts = counts, 
+  genes = genes,
+  samples = samples,
+  remove.zeros = TRUE
+)
+```
+
+- PCA
+
+```{r}
+pca <- prcomp(t(cpm(dge_GSE140286, log = TRUE)))
+
+shape_factor <- paste0(samples$genotype, "_", samples$age) %>% 
+  factor(levels = unique(.))
+
+pca_plot_GSE140286 <- pca$x %>% magrittr::extract(, c("PC1", "PC2")) %>%
+  set_colnames(c("PCa", "PCb")) %>%
+  as.data.frame %>%
+  rownames_to_column("samples") %>%
+  left_join((dge_GSE140286$samples %>% rownames_to_column("samples")), by="samples") %>%
+  ggplot(aes(x=PCa, y = PCb, shape = genotype, colour = as.factor(age))) +
+  geom_point(shape = 1,size = 3.3)+
+  geom_point(alpha = 1,size=3) + 
+  scale_shape_manual(values = c(1,16)) + 
+  #scale_shape_manual(values = c(0,15,1,16,2,17),
+  #                   labels = levels(shape_factor)) +
+  labs(x = "Principal Component 1 (20.5%)", 
+       y = "Principal Component 2 (11%)",
+       colour = "Age (Months)", 
+       shape = "Genotype") +
+  theme(aspect.ratio = 1)
+  
+pca_plot_GSE140286
+```
+
+- In contrast to the other datasets above, the main source of variation in 
+the data is not age but genotype. 
+
+- Overall separation is decent, and I will re-process the data.
+
+
+## Export Objects
+
+- GSE97113 dataset:
+
+```{r eval=FALSE}
+dge_GSE97113 %>% saveRDS(here("data/datasets/mouse/dge_GSE97113.rds"))
+pca_plot_GSE97113 %>% export::graph2pdf(here("data/datasets/mouse/pca_plot_GSE97113"))
+```
+
+- GSE142633 dataset:
+
+```{r eval=FALSE}
+dge_GSE142633 %>% saveRDS(here("data/datasets/mouse/dge_GSE142633.rds"))
+pca_plot_GSE142633 %>% export::graph2pdf(here("data/datasets/mouse/pca_plot_GSE142633"))
+```
+
+- GSE140286 dataset:
+
+```{r eval=FALSE}
+dge_GSE140286 %>% saveRDS(here("data/datasets/mouse/dge_GSE140286.rds"))
+pca_plot_GSE140286 %>% export::graph2pdf(here("data/datasets/mouse/pca_plot_GSE140286"))
+```
+
+
