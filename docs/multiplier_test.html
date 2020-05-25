@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Nhi Hin" />
+
+<meta name="date" content="2020-05-20" />
+
+<title>Testing MultiPLIER</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/master/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 51px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h2 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h3 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h4 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h5 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h6 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #ffffff;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row-fluid">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">mousevsfish</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="about.html">About</a>
+</li>
+<li>
+  <a href="license.html">License</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Testing MultiPLIER</h1>
+<h4 class="author">Nhi Hin</h4>
+<h4 class="date">2020-05-20</h4>
+
+</div>
+
+
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
+<span class="glyphicon glyphicon-list" aria-hidden="true"></span> workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span>
+</button>
+</p>
+<div id="workflowr-report" class="collapse">
+<ul class="nav nav-tabs">
+<li class="active">
+<a data-toggle="tab" href="#summary">Summary</a>
+</li>
+<li>
+<a data-toggle="tab" href="#checks"> Checks <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> </a>
+</li>
+<li>
+<a data-toggle="tab" href="#versions">Past versions</a>
+</li>
+</ul>
+<div class="tab-content">
+<div id="summary" class="tab-pane fade in active">
+<p>
+<strong>Last updated:</strong> 2020-05-21
+</p>
+<p>
+<strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 6 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 1
+</p>
+<p>
+<strong>Knit directory:</strong> <code>mousevsfish/</code> <span class="glyphicon glyphicon-question-sign" aria-hidden="true" title="This is the local directory in which the code in this file was executed."> </span>
+</p>
+<p>
+This reproducible <a href="http://rmarkdown.rstudio.com">R Markdown</a> analysis was created with <a
+  href="https://github.com/jdblischak/workflowr">workflowr</a> (version 1.6.2). The <em>Checks</em> tab describes the reproducibility checks that were applied when the results were created. The <em>Past versions</em> tab lists the development history.
+</p>
+<hr>
+</div>
+<div id="checks" class="tab-pane fade">
+<div id="workflowr-checks" class="panel-group">
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges"> <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted changes </a>
+</p>
+</div>
+<div id="strongRMarkdownfilestronguncommittedchanges" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The R Markdown is untracked by Git. To know which version of the R Markdown file created these results, you’ll want to first commit it to the Git repo. If you’re still working on the analysis, you can ignore this warning. When you’re finished, you can run <code>wflow_publish</code> to commit the R Markdown file and build the HTML.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongEnvironmentstrongempty"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Environment:</strong> empty </a>
+</p>
+</div>
+<div id="strongEnvironmentstrongempty" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! The global environment was empty. Objects defined in the global environment can affect the analysis in your R Markdown file in unknown ways. For reproduciblity it’s best to always run the code in an empty environment.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSeedstrongcodesetseed20200504code"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Seed:</strong> <code>set.seed(20200504)</code> </a>
+</p>
+</div>
+<div id="strongSeedstrongcodesetseed20200504code" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The command <code>set.seed(20200504)</code> was run prior to running the code in the R Markdown file. Setting a seed ensures that any results that rely on randomness, e.g. subsampling or permutations, are reproducible.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSessioninformationstrongrecorded"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Session information:</strong> recorded </a>
+</p>
+</div>
+<div id="strongSessioninformationstrongrecorded" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Recording the operating system, R version, and package versions is critical for reproducibility.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongCachestrongnone"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Cache:</strong> none </a>
+</p>
+</div>
+<div id="strongCachestrongnone" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Nice! There were no cached chunks for this analysis, so you can be confident that you successfully produced the results during this run.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongFilepathsstrongrelative"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>File paths:</strong> relative </a>
+</p>
+</div>
+<div id="strongFilepathsstrongrelative" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Using relative paths to the files within your workflowr project makes it easier to run your code on other machines.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomnhihinmousevsfishtree726fdf7d329f9a60850b65796a42efab5a0b0148targetblank726fdf7a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/nhihin/mousevsfish/tree/726fdf7d329f9a60850b65796a42efab5a0b0148" target="_blank">726fdf7</a> </a>
+</p>
+</div>
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomnhihinmousevsfishtree726fdf7d329f9a60850b65796a42efab5a0b0148targetblank726fdf7a" class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
+</p>
+<p>
+The results in this page were generated with repository version <a href="https://github.com/nhihin/mousevsfish/tree/726fdf7d329f9a60850b65796a42efab5a0b0148" target="_blank">726fdf7</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+</p>
+<p>
+Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
+</p>
+<pre><code>
+Ignored files:
+    Ignored:    .Rhistory
+    Ignored:    .Rproj.user/
+    Ignored:    data/.DS_Store
+    Ignored:    data/de/
+    Ignored:    data/enrichment/
+
+Untracked files:
+    Untracked:  Rplot.png
+    Untracked:  Rplot01.png
+    Untracked:  analysis/gsea.Rmd
+    Untracked:  analysis/import-kallisto-1.Rmd
+    Untracked:  analysis/import-kallisto-2.Rmd
+    Untracked:  analysis/import-kallisto-3.Rmd
+    Untracked:  analysis/import-kallisto-data.Rmd
+    Untracked:  analysis/multiplier_test.Rmd
+    Untracked:  analysis/preprocess_mouse_data.Rmd
+    Untracked:  analysis/projectTest.Rmd
+    Untracked:  analysis/projectr-test.Rmd
+    Untracked:  code/combinedGSEA.R
+    Untracked:  data/datasets/
+    Untracked:  data/genesets/
+    Untracked:  data/multiplier/
+    Untracked:  installed_old.rda
+    Untracked:  ~$notes.docx
+
+Unstaged changes:
+    Modified:   analysis/import-data.Rmd
+
+</code></pre>
+<p>
+Note that any generated files, e.g. HTML, png, CSS, etc., are not included in this status report because it is ok for generated content to have uncommitted changes.
+</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+</div>
+<div id="versions" class="tab-pane fade">
+<p>
+There are no past versions. Publish this analysis with <code>wflow_publish()</code> to start tracking its development.
+</p>
+<hr>
+</div>
+</div>
+</div>
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<ul>
+<li><p>MultiPLIER is a PLIER model trained on the entire <em>recount2</em> dataset. <em>recount2</em> contains many different RNA-seq human datasets from multiple tissues, cell types, and diseases.</p></li>
+<li><p>The resulting MultiPLIER model supposedly contains surrogate variables (SVs) that are sensitive compared to a PLIER model trained on one dataset.</p></li>
+</ul>
+<p>From the <a href="https://www.sciencedirect.com/science/article/pii/S240547121930119X#bib25">MultiPLIER paper</a>:</p>
+<blockquote>
+In summary, MultiPLIER’s features have biological relevance and can be directly compared across datasets making it particularly valuable for and a conceptual advance in the integrative analysis of complex human disease.
+</blockquote>
+<ul>
+<li><p>In order to apply the MultiPLIER model to a dataset, we need to do the following:</p>
+<ol style="list-style-type: decimal">
+<li>Convert gene IDs to human gene symbols</li>
+<li>Provide the gene count matrix to MultiPLIER’s <code>GetNewDataB()</code> function.</li>
+</ol></li>
+</ul>
+</div>
+<div id="zebrafish-dataset" class="section level2">
+<h2>1. Zebrafish Dataset</h2>
+<ul>
+<li>Import in the DGEList object previously created:</li>
+</ul>
+<pre class="r"><code>dge_zeb &lt;- readRDS(here(&quot;data&quot;, &quot;datasets&quot;, &quot;zebrafish&quot;, &quot;dge.rds&quot;))
+dge_zeb</code></pre>
+<pre><code>An object of class &quot;DGEList&quot;
+$counts
+                   wt_6_0_1  wt_6_0_2  wt_6_0_3  wt_6_0_4 wt_6_1_2  wt_6_1_3
+ENSDARG00000000001  196.907  336.3001  262.9228  220.8249  249.864  463.4722
+ENSDARG00000000002  131.093  217.6999  170.0772  167.1751  141.136  273.5278
+ENSDARG00000000018  592.000 1065.0000  752.0000  829.0000  795.000 1241.0000
+ENSDARG00000000019 3204.000 5108.0000 3561.0000 3872.0000 3405.000 5793.0000
+ENSDARG00000000068  217.000  441.0000  302.0000  285.0000  326.000  535.0000
+                    wt_6_1_4  wt_6_1_1 q96_6_0_1 q96_6_0_2 q96_6_0_3 q96_6_0_4
+ENSDARG00000000001  214.2697  214.6166  159.6455  175.8766  256.9751  140.6898
+ENSDARG00000000002  303.7303  149.3834  194.3545  137.1234  165.0249  133.3102
+ENSDARG00000000018  913.0000  828.0000  621.0000  586.0000  800.0000  569.0000
+ENSDARG00000000019 4741.0000 3694.0000 3164.0000 3247.0000 4069.0000 3281.0000
+ENSDARG00000000068  342.0000  297.0000  243.0000  233.0000  288.0000  180.0000
+                   q96_6_1_1 q96_6_1_2 q96_6_1_3 q96_6_1_4 wt_24_0_1 wt_24_0_2
+ENSDARG00000000001  390.0253   241.329  258.7419  249.4515  314.1703  330.8257
+ENSDARG00000000002  292.9747   268.671  250.2581  231.5485  410.8297  330.1743
+ENSDARG00000000018 1475.0000   864.000  925.0000  966.0000  790.0000  948.0000
+ENSDARG00000000019 5717.0000  4464.000 4666.0000 4517.0000 4693.0000 4229.0000
+ENSDARG00000000068  503.0000   330.000  367.0000  374.0000  398.0000  457.0000
+                   wt_24_0_3 wt_24_0_4 wt_24_1_1 wt_24_1_2 wt_24_1_3 wt_24_1_4
+ENSDARG00000000001  286.3625  273.4969  287.6616  319.7387  255.3742  222.8791
+ENSDARG00000000002  389.6375  353.5031  222.3384  319.2613  245.6258  312.1209
+ENSDARG00000000018  838.0000  829.0000  761.0000  876.0000  767.0000  823.0000
+ENSDARG00000000019 4344.0000 4888.0000 3830.0000 3830.0000 3809.0000 4375.0000
+ENSDARG00000000068  444.0000  444.0000  369.0000  364.0000  429.0000  295.0000
+                   q96_24_0_1 q96_24_0_2 q96_24_0_3 q96_24_0_4 q96_24_1_1
+ENSDARG00000000001   276.1545   218.8831   235.3858   188.8943   144.7541
+ENSDARG00000000002   319.8455   330.1169   424.6142   327.1057   402.2459
+ENSDARG00000000018   886.0000   717.0000   775.0000   728.0000   667.0000
+ENSDARG00000000019  4864.0000  3647.0000  4772.0000  4603.0000  3720.0000
+ENSDARG00000000068   397.0000   389.0000   360.0000   351.0000   367.0000
+                   q96_24_1_2 q96_24_1_3 q96_24_1_4
+ENSDARG00000000001   259.8351   199.8374   189.1448
+ENSDARG00000000002   293.1649   356.1626   343.8552
+ENSDARG00000000018   863.0000   777.0000   709.0000
+ENSDARG00000000019  4032.0000  4082.0000  3378.0000
+ENSDARG00000000068   396.0000   281.0000   287.0000
+25025 more rows ...
+
+$samples
+         group lib.size norm.factors
+wt_6_0_1     1 17342614     0.995341
+wt_6_0_2     1 30040365     1.013081
+wt_6_0_3     1 19329223     1.018137
+wt_6_0_4     1 20498892     1.008803
+wt_6_1_2     1 19930475     1.026132
+                                                                                                        path
+wt_6_0_1  /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/1_MORGAN_6P_PN1_S2_R1_001
+wt_6_0_2  /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/2_MORGAN_6P_PN2_S5_R1_001
+wt_6_0_3 /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/3_MORGAN_6P_PN3_S10_R1_001
+wt_6_0_4  /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/4_MORGAN_6P_PN4_S8_R1_001
+wt_6_1_2 /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/10_MORGAN_6P_PH2_S9_R1_001
+                           basename     id Age Genotype Hypoxia Gender  Group
+wt_6_0_1  1_MORGAN_6P_PN1_S2_R1_001 6P_PN1   6       wt       0   male wt_6_0
+wt_6_0_2  2_MORGAN_6P_PN2_S5_R1_001 6P_PN2   6       wt       0 female wt_6_0
+wt_6_0_3 3_MORGAN_6P_PN3_S10_R1_001 6P_PN3   6       wt       0 female wt_6_0
+wt_6_0_4  4_MORGAN_6P_PN4_S8_R1_001 6P_PN4   6       wt       0 female wt_6_0
+wt_6_1_2 10_MORGAN_6P_PH2_S9_R1_001 6P_PH2   6       wt       1 female wt_6_1
+           sample
+wt_6_0_1 wt_6_0_1
+wt_6_0_2 wt_6_0_2
+wt_6_0_3 wt_6_0_3
+wt_6_0_4 wt_6_0_4
+wt_6_1_2 wt_6_1_2
+27 more rows ...
+
+$genes
+                      ensembl_gene_id gene_name   gene_biotype entrezid
+ENSDARG00000000001 ENSDARG00000000001   slc35a5 protein_coding   368418
+ENSDARG00000000002 ENSDARG00000000002    ccdc80 protein_coding   368419
+ENSDARG00000000018 ENSDARG00000000018      nrf1 protein_coding    64604
+ENSDARG00000000019 ENSDARG00000000019     ube2h protein_coding   368425
+ENSDARG00000000068 ENSDARG00000000068 slc9a3r1a protein_coding   327272
+                                                                                                                                          description
+ENSDARG00000000001                                                           solute carrier family 35, member A5 [Source:ZFIN;Acc:ZDB-GENE-030616-55]
+ENSDARG00000000002                                                              coiled-coil domain containing 80 [Source:ZFIN;Acc:ZDB-GENE-030616-56]
+ENSDARG00000000018                                                                   nuclear respiratory factor 1 [Source:ZFIN;Acc:ZDB-GENE-001221-1]
+ENSDARG00000000019                                        ubiquitin-conjugating enzyme E2H (UBC8 homolog, yeast) [Source:ZFIN;Acc:ZDB-GENE-030616-67]
+ENSDARG00000000068 solute carrier family 9, subfamily A (NHE3, cation proton antiporter 3), member 3 regulator 1a [Source:ZFIN;Acc:ZDB-GENE-031006-7]
+25025 more rows ...</code></pre>
+<ul>
+<li>Get zebrafish gene information</li>
+</ul>
+<pre class="r"><code>ah &lt;- AnnotationHub()</code></pre>
+<pre><code>snapshotDate(): 2019-10-29</code></pre>
+<pre class="r"><code># ah %&gt;%
+#   subset(grepl(&quot;rerio&quot;, species)) %&gt;%
+#   subset(rdataclass == &quot;EnsDb&quot;)
+ensDb &lt;- ah[[&quot;AH69169&quot;]] # Ensembl 96 EnsDb for Danio rerio</code></pre>
+<pre><code>loading from cache</code></pre>
+<pre><code>require(&quot;ensembldb&quot;)</code></pre>
+<pre class="r"><code># Get gene info for zebrafish
+genes &lt;- genes(ensDb)
+genes %&lt;&gt;% 
+  as.data.frame %&gt;% 
+  dplyr::distinct(gene_id, .keep_all=TRUE)</code></pre>
+<ul>
+<li>We need human gene symbols so the zebrafish IDs will be converted using biomart.</li>
+</ul>
+<pre class="r"><code># Sometimes biomart doesn&#39;t connect so I&#39;ve saved the mart object out
+# zebMart &lt;- useMart(&quot;ensembl&quot;, &quot;drerio_gene_ensembl&quot;)
+zebMart &lt;- readRDS(here(&quot;data&quot;, &quot;datasets&quot;,&quot;zebrafish&quot;, &quot;zebMart.rds&quot;))
+getFromBiomart &lt;- c(&quot;ensembl_gene_id&quot;, &quot;hsapiens_homolog_ensembl_gene&quot;)
+zebAndHumanEnsGenes &lt;- getBM(getFromBiomart, 
+                             values = unique(genes$gene_id), 
+                             mart = zebMart) %&gt;%
+  set_colnames(c(&quot;zebrafish_ensembl&quot;, &quot;human_ensembl&quot;)) %&gt;%
+  # Only keep zebrafish genes which have human homolog
+  dplyr::filter(human_ensembl!=&quot;&quot;) </code></pre>
+<pre><code>Cache found</code></pre>
+<ul>
+<li>Convert human ensembl to symbol</li>
+</ul>
+<pre class="r"><code>ah %&gt;%
+  subset(grepl(&quot;sapiens&quot;, species)) %&gt;%
+  subset(rdataclass == &quot;EnsDb&quot;)</code></pre>
+<pre><code>AnnotationHub with 14 records
+# snapshotDate(): 2019-10-29 
+# $dataprovider: Ensembl
+# $species: Homo sapiens
+# $rdataclass: EnsDb
+# additional mcols(): taxonomyid, genome, description,
+#   coordinate_1_based, maintainer, rdatadateadded, preparerclass, tags,
+#   rdatapath, sourceurl, sourcetype 
+# retrieve records with, e.g., &#39;object[[&quot;AH53211&quot;]]&#39; 
+
+            title                            
+  AH53211 | Ensembl 87 EnsDb for Homo Sapiens
+  AH53715 | Ensembl 88 EnsDb for Homo Sapiens
+  AH56681 | Ensembl 89 EnsDb for Homo Sapiens
+  AH57757 | Ensembl 90 EnsDb for Homo Sapiens
+  AH60773 | Ensembl 91 EnsDb for Homo Sapiens
+  ...       ...                              
+  AH69187 | Ensembl 96 EnsDb for Homo sapiens
+  AH73881 | Ensembl 97 EnsDb for Homo sapiens
+  AH73986 | Ensembl 79 EnsDb for Homo sapiens
+  AH75011 | Ensembl 98 EnsDb for Homo sapiens
+  AH78783 | Ensembl 99 EnsDb for Homo sapiens</code></pre>
+<pre class="r"><code>humanEnsDb &lt;- ah[[&quot;AH69187&quot;]] # Ensembl 96 EnsDb for Homo sapiens</code></pre>
+<pre><code>loading from cache</code></pre>
+<pre class="r"><code>human_genes &lt;- genes(humanEnsDb) %&gt;% 
+  as.data.frame %&gt;%
+  dplyr::distinct(gene_id,.keep_all=TRUE)
+
+humanEnsemblAndSymbol &lt;- human_genes %&gt;%
+  dplyr::select(gene_id, symbol)
+
+zebEns2humanSym &lt;- zebAndHumanEnsGenes %&gt;% 
+  left_join(humanEnsemblAndSymbol, by = c(&quot;human_ensembl&quot;=&quot;gene_id&quot;)) </code></pre>
+<ul>
+<li>Get the counts matrix:</li>
+</ul>
+<pre class="r"><code>counts_zeb &lt;- dge_zeb %&gt;%cpm(log=TRUE)%&gt;%
+  as.data.frame %&gt;%
+  rownames_to_column(&quot;zebrafish_ensembl&quot;) %&gt;%
+  left_join(zebEns2humanSym, by = &quot;zebrafish_ensembl&quot;) %&gt;%
+  dplyr::distinct(symbol, .keep_all=TRUE) %&gt;%
+  dplyr::filter(!is.na(symbol)) %&gt;%
+  dplyr::filter(symbol!=&quot;&quot;)%&gt;%
+  dplyr::select(-human_ensembl, -zebrafish_ensembl) %&gt;%
+  column_to_rownames(&quot;symbol&quot;) %&gt;%
+  as.matrix</code></pre>
+<ul>
+<li>Save it out and upload the rds to Phoenix HPC</li>
+</ul>
+<pre class="r"><code>saveRDS(counts_zeb, here(&quot;data&quot;, &quot;multiplier&quot;, &quot;zeb_matrix2.rds&quot;))</code></pre>
+<ul>
+<li>Previously downloaded the MultiPLIER files from <a href="https://figshare.com/articles/MultiPLIER_Fileset/6982919/2">Figshare</a>. This had to be submitted as a Phoenix job as the files were 82 Gb in total.</li>
+</ul>
+<pre class="bash"><code>wget --no-check-certificate https://figshare.com/articles/MultiPLIER_Fileset/6982919/2</code></pre>
+<ul>
+<li>The following code was run on Phoenix as I’m running low on internet data and couldn’t download the MultiPLIER model locally.</li>
+</ul>
+<pre class="r"><code>library(PLIER)
+model  &lt;- readRDS(&quot;/fast/users/a1669135/multi-plier/data/recount2_PLIER_data/recount_PLIER_model.RDS&quot;)
+source(file.path(&quot;/fast/users/a1669135/multi-plier/util&quot;, &quot;plier_util.R&quot;))
+zebMatrix &lt;- readRDS(&quot;/fast/users/a1669135/zeb_matrix.rds&quot;)
+recountRes &lt;- GetNewDataB(zebMatrix, model)
+saveRDS(recountRes, &quot;/fast/users/a1669135/recountRes.rds&quot;)</code></pre>
+<div id="import-in-multiplier-results" class="section level3">
+<h3>1.1. Import in MultiPLIER results</h3>
+<pre class="r"><code>recountRes &lt;- readRDS(here(&quot;data&quot;, &quot;multiplier&quot;, &quot;recountRes2.rds&quot;))
+dim(recountRes)</code></pre>
+<pre><code>[1] 987  32</code></pre>
+<ul>
+<li>There are 987 features in the MultiPLIER model</li>
+</ul>
+</div>
+<div id="heatmap-of-latent-variables" class="section level3">
+<h3>1.2. Heatmap of latent variables</h3>
+<pre class="r"><code>idx_relevantLV &lt;- c(grep(&quot;SVM&quot;, rownames(recountRes)))
+rownames(recountRes) &lt;- abbreviate(rownames(recountRes))
+
+# Heatmap of all LVs and samples
+recountRes %&gt;% pheatmap::pheatmap(scale=&quot;row&quot;,
+                                  cluster_cols = FALSE)</code></pre>
+<p><img src="figure/multiplier_test.Rmd/unnamed-chunk-11-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Subset of some 6 month old samples (WT normoxia, WT hypoxia, mutant normoxia)
+# and a subset of the immune cell type LVs
+recountRes[idx_relevantLV, c(1:4,5:8,9:12)] %&gt;%
+  pheatmap::pheatmap(scale=&quot;row&quot;, cluster_cols = FALSE)</code></pre>
+<p><img src="figure/multiplier_test.Rmd/unnamed-chunk-11-2.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li>No matter how I look at it, it doesn’t seem like these features can distinguish between sample groups at all…</li>
+</ul>
+</div>
+<div id="pca" class="section level3">
+<h3>1.3. PCA</h3>
+<ul>
+<li>Last test using PCA on the latent variables.</li>
+</ul>
+<pre class="r"><code>pca &lt;- recountRes %&gt;% t %&gt;% prcomp()
+summary(pca) # PC1: 20%, PC2: 15%</code></pre>
+<pre><code>Importance of components:
+                          PC1    PC2    PC3     PC4     PC5     PC6     PC7
+Standard deviation     0.4451 0.3867 0.3154 0.26944 0.23002 0.19989 0.17910
+Proportion of Variance 0.1993 0.1504 0.1000 0.07301 0.05321 0.04019 0.03226
+Cumulative Proportion  0.1993 0.3497 0.4497 0.52271 0.57593 0.61611 0.64837
+                           PC8    PC9    PC10    PC11    PC12    PC13    PC14
+Standard deviation     0.16517 0.1596 0.15109 0.14321 0.13928 0.13395 0.13219
+Proportion of Variance 0.02744 0.0256 0.02296 0.02063 0.01951 0.01805 0.01757
+Cumulative Proportion  0.67581 0.7014 0.72437 0.74500 0.76451 0.78255 0.80013
+                          PC15    PC16   PC17    PC18    PC19    PC20    PC21
+Standard deviation     0.12997 0.12759 0.1229 0.12121 0.11533 0.11448 0.11142
+Proportion of Variance 0.01699 0.01637 0.0152 0.01478 0.01338 0.01318 0.01249
+Cumulative Proportion  0.81712 0.83349 0.8487 0.86346 0.87684 0.89002 0.90251
+                          PC22    PC23    PC24    PC25    PC26    PC27    PC28
+Standard deviation     0.10851 0.10683 0.10434 0.10215 0.09836 0.09637 0.09496
+Proportion of Variance 0.01184 0.01148 0.01095 0.01049 0.00973 0.00934 0.00907
+Cumulative Proportion  0.91435 0.92583 0.93678 0.94727 0.95700 0.96634 0.97541
+                          PC29    PC30    PC31      PC32
+Standard deviation     0.09329 0.09169 0.08566 1.977e-16
+Proportion of Variance 0.00875 0.00846 0.00738 0.000e+00
+Cumulative Proportion  0.98416 0.99262 1.00000 1.000e+00</code></pre>
+<pre class="r"><code>pca_plot &lt;- pca$x %&gt;%
+  magrittr::extract(, c(&quot;PC1&quot;, &quot;PC2&quot;)) %&gt;%
+  as.data.frame() %&gt;%
+  rownames_to_column(&quot;samples&quot;) %&gt;%
+  left_join((dge_zeb$samples %&gt;% rownames_to_column(&quot;samples&quot;)), by=&quot;samples&quot;) %&gt;%
+  ggplot(aes(x=PC1, y = PC2, 
+             colour = as.factor(paste0(Age, &quot;mths, &quot;, Genotype)), 
+             shape = Gender)) +
+  geom_point(alpha = 0.7,size=3) +
+  theme(aspect.ratio = 1) +
+    labs(x = &quot;Principal Component 1 (20%)&quot;,
+         y = &quot;Principal Component 2 (15%)&quot;, 
+         colour = &quot;Age in \nmonths and \ngenotype&quot;, shape = &quot;Sex&quot;) 
+
+pca_plot</code></pre>
+<p><img src="figure/multiplier_test.Rmd/unnamed-chunk-12-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li>For comparison, a PCA of the original gene expression counts (logCPM):</li>
+</ul>
+<pre class="r"><code>pca_orig &lt;- dge_zeb %&gt;% cpm(log=TRUE) %&gt;% t %&gt;% prcomp()
+summary(pca_orig) # PC1: 19.2%, PC2: 6%</code></pre>
+<pre><code>Importance of components:
+                           PC1      PC2      PC3      PC4      PC5      PC6
+Standard deviation     32.7870 18.28904 17.55036 16.39476 15.76348 14.97463
+Proportion of Variance  0.1915  0.05959  0.05488  0.04789  0.04427  0.03995
+Cumulative Proportion   0.1915  0.25112  0.30599  0.35388  0.39815  0.43810
+                            PC7      PC8      PC9    PC10     PC11     PC12
+Standard deviation     13.82294 13.55283 12.99557 12.6928 12.43654 12.34447
+Proportion of Variance  0.03404  0.03272  0.03009  0.0287  0.02756  0.02715
+Cumulative Proportion   0.47214  0.50487  0.53496  0.5637  0.59122  0.61837
+                           PC13     PC14     PC15     PC16     PC17     PC18
+Standard deviation     11.80978 11.77567 11.59993 11.44900 11.28625 11.09098
+Proportion of Variance  0.02485  0.02471  0.02397  0.02335  0.02269  0.02192
+Cumulative Proportion   0.64321  0.66792  0.69189  0.71525  0.73794  0.75986
+                           PC19     PC20     PC21     PC22     PC23     PC24
+Standard deviation     10.94333 10.85024 10.74742 10.67808 10.62998 10.47855
+Proportion of Variance  0.02134  0.02097  0.02058  0.02031  0.02013  0.01956
+Cumulative Proportion   0.78119  0.80217  0.82274  0.84306  0.86319  0.88275
+                           PC25     PC26    PC27    PC28    PC29    PC30
+Standard deviation     10.17287 10.08982 9.98698 9.76654 9.50397 9.26861
+Proportion of Variance  0.01844  0.01814 0.01777 0.01699 0.01609 0.01531
+Cumulative Proportion   0.90119  0.91933 0.93710 0.95409 0.97018 0.98549
+                          PC31      PC32
+Standard deviation     9.02472 6.269e-14
+Proportion of Variance 0.01451 0.000e+00
+Cumulative Proportion  1.00000 1.000e+00</code></pre>
+<pre class="r"><code>pca_orig_plot &lt;- pca_orig$x %&gt;%
+  magrittr::extract(, c(&quot;PC1&quot;, &quot;PC2&quot;)) %&gt;%
+  as.data.frame() %&gt;%
+  rownames_to_column(&quot;samples&quot;) %&gt;%
+  left_join((dge_zeb$samples %&gt;% rownames_to_column(&quot;samples&quot;)), by=&quot;samples&quot;) %&gt;%
+  ggplot(aes(x=PC1, y = PC2, 
+             colour = as.factor(paste0(Age, &quot;mths, &quot;, Genotype)), 
+             shape = Gender)) +
+  geom_point(alpha = 0.7,size=3) +
+  theme(aspect.ratio = 1) +
+    labs(x = &quot;Principal Component 1 (19.2%)&quot;,
+         y = &quot;Principal Component 2 (6%)&quot;, 
+         colour = &quot;Age in \nmonths and \ngenotype&quot;, shape = &quot;Sex&quot;) 
+
+pca_orig_plot</code></pre>
+<p><img src="figure/multiplier_test.Rmd/unnamed-chunk-13-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><p>Surprisingly, despite only having 987 features (latent variables) in the MultiPLIER model, the PCA somehow even looks better than the one based on ~25,000 genes. Weirdly enough the mutant samples which looked kind of like outliers in the plot with all genes group back with their group in the LV PCA.</p></li>
+<li><p>Separation by genotype isn’t 100% across PC1. It looks like at 6 months of age, the mutant samples can’t really be separated from the WT samples either.</p></li>
+<li><p>Separation by age is still retained across PC2. However, this was already an incredibly strong effect in the gene PCA.</p></li>
+<li><p>This would suggest that the effects on gene expression through the Q96_K97del/+ genotype may be too subtle to be able to be captured through such a small set of latent variables.</p></li>
+</ul>
+</div>
+</div>
+<div id="next-steps" class="section level2">
+<h2>2. Next steps</h2>
+<ul>
+<li><p>Will test out CoGAPs and ProjectR as well just to see if non-negative matrix factorisation has any utility at all.</p></li>
+<li><p>Seeing as we’ve previously gotten really clean and interpretable results using standard gene set enrichment testing methods with Hallmark / KEGG gene set collections, I would say that those approaches seem more reliable for our aims.</p></li>
+</ul>
+<p><strong>Limitations:</strong></p>
+<ul>
+<li><p>I used MultiPLIER with default settings and parameters. The model is intended to be easily transferred to any dataset, so would have expected it to give some decent results, but it seems it just didn’t really work here, so not much point further tuning settings.</p></li>
+<li><p>MultiPLIER was created based on human RNA-seq data. Not all human genes have zebrafish homologs, so it’s possible that the LVs determined in humans may not apply to zebrafish. However, considering that MSigDB gene sets easily give interpretable results in zebrafish, I’m not sure.</p></li>
+<li><p><a href="https://www.mdpi.com/2073-4425/11/2/226/htm">This</a> study used MultiPLIER to get additional insight into differences between tumour subtypes and found it wasn’t super informative at distinguishing between the subtypes (subtypes had similar distributions of LV expression and PCA was similar to original with genes). More analysis at their <a href="https://github.com/Sage-Bionetworks/NF_LandscapePaper_2019">GitHub</a>.</p></li>
+</ul>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.6.3 (2020-02-29)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS Mojave 10.14.6
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRblas.0.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_AU.UTF-8/en_AU.UTF-8/en_AU.UTF-8/C/en_AU.UTF-8/en_AU.UTF-8
+
+attached base packages:
+[1] stats4    parallel  stats     graphics  grDevices utils     datasets 
+[8] methods   base     
+
+other attached packages:
+ [1] ensembldb_2.10.2        AnnotationFilter_1.10.0 GenomicFeatures_1.38.2 
+ [4] GenomicRanges_1.38.0    GenomeInfoDb_1.22.1     ggplot2_3.3.0          
+ [7] tibble_3.0.1            edgeR_3.28.1            limma_3.42.2           
+[10] dplyr_0.8.5             magrittr_1.5            org.Hs.eg.db_3.10.0    
+[13] AnnotationDbi_1.48.0    IRanges_2.20.2          S4Vectors_0.24.4       
+[16] Biobase_2.46.0          biomaRt_2.42.1          AnnotationHub_2.18.0   
+[19] BiocFileCache_1.10.2    dbplyr_1.4.3            BiocGenerics_0.32.0    
+[22] here_0.1                PLIER_0.99.0            qvalue_2.18.0          
+[25] rsvd_1.0.3              knitr_1.28              glmnet_4.0             
+[28] Matrix_1.2-18           pheatmap_1.0.12         gplots_3.0.3           
+[31] RColorBrewer_1.1-2     
+
+loaded via a namespace (and not attached):
+ [1] colorspace_1.4-1              ellipsis_0.3.1               
+ [3] rprojroot_1.3-2               XVector_0.26.0               
+ [5] fs_1.4.1                      farver_2.0.3                 
+ [7] bit64_0.9-7                   interactiveDisplayBase_1.24.0
+ [9] codetools_0.2-16              splines_3.6.3                
+[11] workflowr_1.6.2               Rsamtools_2.2.3              
+[13] shiny_1.4.0.2                 BiocManager_1.30.10          
+[15] compiler_3.6.3                httr_1.4.1                   
+[17] backports_1.1.7               lazyeval_0.2.2               
+[19] assertthat_0.2.1              fastmap_1.0.1                
+[21] later_1.0.0                   htmltools_0.4.0              
+[23] prettyunits_1.1.1             tools_3.6.3                  
+[25] gtable_0.3.0                  glue_1.4.1                   
+[27] GenomeInfoDbData_1.2.2        reshape2_1.4.4               
+[29] rappdirs_0.3.1                Rcpp_1.0.4                   
+[31] vctrs_0.3.0                   Biostrings_2.54.0            
+[33] gdata_2.18.0                  rtracklayer_1.46.0           
+[35] iterators_1.0.12              xfun_0.13                    
+[37] stringr_1.4.0                 mime_0.9                     
+[39] lifecycle_0.2.0               gtools_3.8.2                 
+[41] XML_3.99-0.3                  zlibbioc_1.32.0              
+[43] scales_1.1.1                  ProtGenerics_1.18.0          
+[45] hms_0.5.3                     promises_1.1.0               
+[47] SummarizedExperiment_1.16.1   yaml_2.2.1                   
+[49] curl_4.3                      memoise_1.1.0                
+[51] stringi_1.4.6                 RSQLite_2.2.0                
+[53] BiocVersion_3.10.1            foreach_1.5.0                
+[55] caTools_1.18.0                BiocParallel_1.20.1          
+[57] shape_1.4.4                   rlang_0.4.6                  
+[59] pkgconfig_2.0.3               bitops_1.0-6                 
+[61] matrixStats_0.56.0            evaluate_0.14                
+[63] lattice_0.20-41               purrr_0.3.4                  
+[65] labeling_0.3                  GenomicAlignments_1.22.1     
+[67] bit_1.1-15.2                  tidyselect_1.1.0             
+[69] plyr_1.8.6                    R6_2.4.1                     
+[71] DelayedArray_0.12.3           DBI_1.1.0                    
+[73] pillar_1.4.4                  withr_2.2.0                  
+[75] RCurl_1.98-1.2                crayon_1.3.4                 
+[77] KernSmooth_2.23-17            rmarkdown_2.1                
+[79] progress_1.2.2                locfit_1.5-9.4               
+[81] grid_3.6.3                    blob_1.2.1                   
+[83] git2r_0.27.1                  digest_0.6.25                
+[85] xtable_1.8-4                  httpuv_1.5.2                 
+[87] openssl_1.4.1                 munsell_0.5.0                
+[89] askpass_1.1                  </code></pre>
+</div>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+http://docs.mathjax.org/en/latest/configuration.html.  This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
