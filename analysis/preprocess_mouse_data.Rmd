@@ -1,0 +1,33 @@
+---
+title: "Pre-process 5XFAD Mouse Datasets"
+author: "Nhi Hin"
+date: "2020-05-06"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+## Dataset 1. GSE97113
+
+- The fastq files were downloaded from ENA using FTP and 
+stored in Phoenix. 
+
+```{r}
+count=1; for file in *_1.fastq.gz; do mv $file  ${count}_${file}; count=$(expr $count + 1);  done
+```
+
+## Kallisto References 
+
+- Indexes for human and mouse based on Ensembl release 96. 
+
+```{r engine='bash'}
+humanIdx=/data/biorefs/reference_genomes/ensembl-release-96/homo_sapiens/kallisto/Homo_sapiens.GRCh38.cdna.primary_assembly.idx
+mouseIdx=/data/biorefs/reference_genomes/ensembl-release-96/mus_musculus/kallisto/Mus_musculus.GRCm38.cdna.primary_assembly.idx
+```
+
+- Running Kallisto
+
+```{r engine='bash'}
+
+```
+

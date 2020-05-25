@@ -1,0 +1,158 @@
+---
+title: "projectTest"
+author: "Nhi Hin"
+date: "2020-05-17"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+library(CoGAPS)
+library(projectR)
+library(here)
+library(tibble)
+library(ggplot2)
+library(dplyr)
+library(sva)
+library(magrittr)
+theme_set(theme_bw())
+
+```
+
+
+## 0. Import in DGELists
+
+```{r}
+dge_GSE97113 <- readRDS(here("data", "datasets", "mouse", 
+                             "GSE97113", "dge.rds"))
+
+dge_GSE140286 <- readRDS(here("data", "datasets", "mouse",
+                              "GSE140286", "dge.rds"))
+
+dge_GSE142633 <- readRDS(here("data", "datasets", "mouse",
+                              "GSE142633", "dge.rds"))
+```
+
+```{r}
+dge_GSE97113$samples$group %>% levels
+dge_GSE140286$samples$group %>% levels
+dge_GSE142633$samples$group %>% levels
+```
+
+```{r}
+dataset_1 <- dge_GSE97113 %>% cpm(log=TRUE) %>% 
+  as.data.frame %>% rownames_to_column("ensembl_gene_id")
+
+dataset_2 <- dge_GSE142633 %>% cpm(log=TRUE) %>% 
+  as.data.frame %>% rownames_to_column("ensembl_gene_id")
+
+dataset_3 <- dge_GSE140286 %>% cpm(log=TRUE) %>% 
+  as.data.frame %>% rownames_to_column("ensembl_gene_id")
+
+datasets <- inner_join(dataset_1, dataset_2, by = "ensembl_gene_id") %>%
+  inner_join(dataset_3, by = "ensembl_gene_id") %>%
+  column_to_rownames("ensembl_gene_id")
+
+datasets_filt <- datasets[!rowSums(datasets < 0),] # 12,489 left
+
+samples_1 <- dge_GSE97113$samples %>%
+  dplyr::select(name, genotype, age, tissue, sex) %>%
+  dplyr::mutate(age = as.numeric(age), 
+                dataset = "GSE97113")
+
+samples_2 <- dge_GSE142633$samples %>% 
+  dplyr::select(name, genotype, age, tissue, sex) %>%
+  dplyr::mutate(age = as.numeric(age),
+                dataset = "GSE142633")
+
+samples_3 <- dge_GSE140286$samples %>%
+  dplyr::select(name, genotype, age, tissue, sex) %>%
+  dplyr::mutate(age = as.numeric(age),
+                dataset = "GSE140286") 
+
+allSamples <- bind_rows(samples_1, samples_2) %>% 
+  bind_rows(samples_3)
+```
+
+
+
+## 1. Attempt to use `psva` to remove sources of technical variation
+
+```{r}
+test1 <- as.matrix(datasets) %>% psva(batch = as.factor(allSamples$dataset))
+
+colnames(test1) <- paste0(allSamples$name, "_", allSamples$dataset)
+
+```
+
+
+```{r}
+filt_test1 <- test1[!rowSums(test1 < 0), ]
+```
+
+
+```{r}
+test_model <- readRDS(here("data", "datasets", "recount_PLIER_model.RDS"))
+```
+
+
+
+PCA
+
+```{r}
+pca_all <- test1 %>% t %>% prcomp() # PC1: 28.8%, PC2: 12.5%
+
+shape_factor <- paste0(allSamples$genotype, "_", allSamples$age) %>% 
+  factor(levels = unique(.))
+
+allSamples %<>% mutate(newName = paste0(allSamples$name, "_", allSamples$dataset))
+
+pca_plot_all <- pca_all$x %>% magrittr::extract(, c("PC1", "PC2")) %>%
+  set_colnames(c("PCa", "PCb")) %>%
+  as.data.frame %>%
+  rownames_to_column("newName") %>%
+  left_join(allSamples, by="newName") %>%
+  ggplot(aes(x=PCa, y = PCb, shape = as.factor(genotype), size=as.factor(age),colour = dataset)) +
+  #geom_point(shape = 1,size = 3.3)+
+  geom_point(alpha = 0.5) + 
+  geom_text(aes(label=age),hjust=0.5, vjust=0.5)+
+  #scale_shape_manual(values = c(1,16,2,17)) + 
+  #scale_shape_manual(values = c(0,15,1,16,2,17, 3, 18, 10, 11)) +
+  #                   labels = levels(shape_factor)) +
+  labs(x = "Principal Component 1 (80.1%)", 
+       y = "Principal Component 2 (19.9%)",
+       colour = "Dataset", 
+       shape = "Genotype", size = "Age (months)") +
+  theme(aspect.ratio = 1)
+  
+pca_plot_all
+```
+
+Test CoGAPS
+
+```{r}
+test2 <- test1 %>% as.data.frame %>% mutate(sum = rowSums(.)) %>%
+  dplyr::filter(sum > 3000) %>%
+  dplyr::select(-sum) %>%
+  as.matrix
+
+testCogaps <- CoGAPS(as.matrix(filt_test1), nIterations = 1000)
+```
+
+
+
+
+
+```{r engine="bash"}
+cd $FASTDIR/datasets/mouse_2/3_quantData/kallisto
+module load R
+R
+library(PLIER)
+library(magrittr)
+model  <- readRDS("/fast/users/a1669135/multi-plier/data/recount2_PLIER_data/recount_PLIER_model.RDS")
+source(file.path("/fast/users/a1669135/multi-plier/util", "plier_util.R"))
+zebMatrix <- readRDS("/fast/users/a1669135/zeb_matrix2.rds")
+```
+
+
