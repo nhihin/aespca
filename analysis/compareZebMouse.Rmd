@@ -1,0 +1,322 @@
+---
+title: "Comparison of 5xFAD mouse and fAD-like zebrafish brain transcriptomes"
+author: "Nhi Hin"
+date: "2020-05-25"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+library(here)
+library(dplyr)
+theme_set(theme_bw())
+```
+
+
+## 0. Introduction/Aims
+
+- Perform a preliminary comparison of the 5xFAD mouse and 
+fAD-like zebrafish datasets through comparing their gene set testing results. 
+This is a straightforward approach that should tell us how comparable 
+they are at first glance. 
+
+- Establish if there are particular ages of the mice that 
+are more comparable to zebrafish. We have various ages of mouse brains 
+ranging from 1 month old to 12 months old. (zebrafish 6 and 24 months old). 
+
+## 1. Import gene set test results
+
+- Previously gene set testing was done using the MSigDB collection Hallmark 
+gene set collection. 
+
+- The `combinedGSEA` function includes the methods *fry*, *camera* and 
+*fgsea* and combines the raw p-values using Wilkinson's method before 
+adjusting for multiple tests. 
+
+- The results are imported below.
+
+```{r}
+# 6 and 24 months old, WT and Q96_K97del/+ mutant
+zebResults <- readRDS(here("data", "datasets", "zebrafish", 
+                             "gsea.rds"))
+
+# 1, 2, and 4 months old, 5XFAD only
+mouResults1 <- readRDS(here("data", "datasets", "mouse", 
+                            "GSE97113", "gsea.rds"))
+
+# 3, 6, and 12 months old, WT and 5XFAD
+mouResults2 <- readRDS(here("data", "datasets", "mouse", 
+                            "GSE140286", "gsea.rds"))
+
+# 6 and 11 months old, WT and 5XFAD
+mouResults3 <- readRDS(here("data", "datasets", "mouse", 
+                            "GSE142633", "gsea.rds"))
+```
+
+## 2. Proportions of up and down-regulated genes in Hallmark gene sets
+
+- The `roast` method for gene set testing conveniently gives us the proportion 
+of genes which are increased (t > 2) or decreased (t < -2) in expression 
+for each comparison. 
+
+- Note that the `mroast` results were not included when combining p-values 
+with Wilkinson's method (only `fry`, `fgsea` and `camera` were included). 
+
+- The rankings for gene sets using the methods `mroast` and `fry` are generally 
+very similar, but `fry` p-values are smaller due to the infinite rotations 
+approximation. 
+
+```{r}
+# Extract proportions of up and down genes from mroast for zebrafish
+zeb_facet1 <- zebResults$indivTest$normoxia_6mth_mutant_vs_wt$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "zeb_effectOfMutation_6mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown) %>%
+  mutate(Geneset = gsub(x = Geneset,
+                        pattern = "HALLMARK_REACTIVE_OXIGEN_SPECIES_PATHWAY",
+                        replacement = "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY"))
+zeb_facet1$fdr <- zebResults$combTest$normoxia_6mth_mutant_vs_wt$fdr
+zeb_facet1 %<>% mutate(significant = fdr < 0.05)
+
+zeb_facet2 <- zebResults$indivTest$normoxia_24mth_mutant_vs_wt$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "zeb_effectOfMutation_24mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown)%>%
+  mutate(Geneset = gsub(x = Geneset,
+                      pattern = "HALLMARK_REACTIVE_OXIGEN_SPECIES_PATHWAY",
+                      replacement = "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY"))
+zeb_facet2$fdr <- zebResults$combTest$normoxia_24mth_mutant_vs_wt$fdr
+zeb_facet2 %<>% mutate(significant = fdr < 0.05)
+
+# Dataset 2 (different ages)
+mou2_facet1 <- mouResults2$indivTest$effectOf5XFAD_3mth$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "mou_effectOfMutation_3mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown)
+mou2_facet1$fdr <- mouResults2$combTest$effectOf5XFAD_3mth$fdr
+mou2_facet1 %<>% mutate(significant = fdr<0.05)
+
+mou2_facet2 <- mouResults2$indivTest$effectOf5XFAD_6mth$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "mou_effectOfMutation_6mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown)
+mou2_facet2$fdr <- mouResults2$combTest$effectOf5XFAD_6mth$fdr
+mou2_facet2 %<>% mutate(significant = fdr<0.05)
+
+mou2_facet3 <- mouResults2$indivTest$effectOf5XFAD_12mth$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "mou_effectOfMutation_12mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown)
+mou2_facet3$fdr <- mouResults2$combTest$effectOf5XFAD_12mth$fdr
+mou2_facet3 %<>% mutate(significant = fdr<0.05)
+```
+
+- Out of the 3, 6, and 12 mouse age groups, which is most similar to 
+6 month mutant zebrafish?
+
+```{r}
+butterfly <- bind_rows(zeb_facet1, mou2_facet1, mou2_facet2,mou2_facet3) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, pattern = "_", replacement = " "),
+                Geneset = gsub(x = Geneset, pattern = "HALLMARK", 
+                               replacement = "")) %>%
+  reshape2::melt(id.vars=c("Geneset","NGenes","contrast", "significant")) %>%
+  dplyr::arrange(desc(NGenes)) %>% 
+  dplyr::rename(direction = variable, ngenes = value) %>%
+  dplyr::mutate(Geneset = factor(Geneset, levels = unique(Geneset)),
+                direction = factor(direction, 
+                                   levels = c("notSig", "down", "up")),
+                contrast = factor(contrast, 
+                                  levels = c("zeb_effectOfMutation_6mth",
+                                             "mou_effectOfMutation_3mth", 
+                                             "mou_effectOfMutation_6mth", 
+                                             "mou_effectOfMutation_12mth")))%>%
+  dplyr::filter(!is.na(direction)) %>%
+  dplyr::mutate(significant = case_when(
+    direction == "up" ~ " ",
+    direction == "down" ~ " ",
+    direction == "notSig" & significant == TRUE ~ "*",
+    direction == "notSig" & significant == FALSE ~ " ")) %>% 
+  ggplot(aes(x = Geneset, y = ngenes, fill = direction)) +
+  geom_col(width=0.6) +
+  facet_grid(~contrast, scales = "free") +
+  #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
+  scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
+  geom_text(aes(label=significant))+
+  coord_flip() +
+  labs(x = "Number of genes", y = "Hallmark gene set",
+       fill = "Direction")
+
+butterfly
+```
+
+```{r}
+butterfly2 <- bind_rows(zeb_facet1, zeb_facet2, mou2_facet2,mou2_facet3) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, pattern = "_", replacement = " "),
+                Geneset = gsub(x = Geneset, pattern = "HALLMARK", 
+                               replacement = "")) %>%
+  reshape2::melt(id.vars=c("Geneset","NGenes","contrast", "significant")) %>%
+  dplyr::arrange(desc(NGenes)) %>% 
+  dplyr::rename(direction = variable, ngenes = value) %>%
+  dplyr::mutate(Geneset = factor(Geneset, levels = unique(Geneset)),
+                direction = factor(direction, 
+                                   levels = c("notSig", "down", "up")),
+                contrast = factor(contrast, 
+                                  levels = c("zeb_effectOfMutation_6mth",
+                                             "zeb_effectOfMutation_24mth",
+                                             "mou_effectOfMutation_6mth", 
+                                             "mou_effectOfMutation_12mth")))%>%
+  dplyr::filter(!is.na(direction)) %>%
+  dplyr::mutate(significant = case_when(
+    direction == "up" ~ " ",
+    direction == "down" ~ " ",
+    direction == "notSig" & significant == TRUE ~ "*",
+    direction == "notSig" & significant == FALSE ~ " ")) %>% 
+  ggplot(aes(x = Geneset, y = ngenes, fill = direction)) +
+  geom_col(width=0.6) +
+  facet_grid(~contrast, scales = "free") +
+  #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
+  scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
+  geom_text(aes(label=significant))+
+  coord_flip() +
+  labs(x = "Number of genes", y = "Hallmark gene set",
+       fill = "Direction")
+
+butterfly2
+```
+```
+
+
+```{r}
+# extract up/downregulated gene proportions from mroast
+x_props <- gseaResults_mouse_h$indivTest$effectOfMutation_3mth$mroast %>% 
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>% 
+  dplyr::mutate(contrast="effectOfMutation_3mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down
+  ) %>%
+  dplyr::select(-PropUp, -PropDown)
+
+x_props2 <- gseaResults_mouse_ire$indivTest$effectOfMutation_3mth$mroast %>% 
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>% 
+  dplyr::mutate(contrast="effectOfMutation_3mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down
+  ) %>%
+  dplyr::select(-PropUp, -PropDown)
+
+x_props <- bind_rows(x_props, x_props2)
+x_fry_with_props <- x_props
+
+# join to fry results
+x_fry_with_props <- gseaResults_mouse_h$indivTest$effectOfMutation_3mth$fry %>%
+  dplyr::filter(FDR.Mixed < 0.05) %>%
+  dplyr::select(Geneset) %>%
+  left_join(x_props)
+
+
+# extract proportions from mroast
+y_props <- gseaResults_mouse_h$indivTest$effectOfMutation_6mth$mroast %>% 
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>% 
+  dplyr::mutate(contrast="effectOfMutation_6mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down
+  ) %>%
+  dplyr::select(-PropUp, -PropDown)
+
+y_props2 <- gseaResults_mouse_ire$indivTest$effectOfMutation_6mth$mroast %>% 
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>% 
+  dplyr::mutate(contrast="effectOfMutation_6mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down
+  ) %>%
+  dplyr::select(-PropUp, -PropDown)
+
+y_props <- bind_rows(y_props, y_props2)
+
+# join to fry results
+# y_fry_with_props <- gseaResults_mouse_h$indivTest$effectOfMutation_6mth$fry %>%
+#   #dplyr::filter(FDR.Mixed < 0.05) %>%
+#   dplyr::select(Geneset) %>%
+#   left_join(y_props)
+
+y_fry_with_props <- y_props
+
+####### slightly dodge but OK 
+z_props <- gseaResults_mouse_h$indivTest$effectOfMutation_12mth$mroast %>% 
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>% 
+  dplyr::mutate(contrast="effectOfMutation_12mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down
+  ) %>%
+  dplyr::select(-PropUp, -PropDown)
+
+z_props2 <- gseaResults_mouse_ire$indivTest$effectOfMutation_12mth$mroast %>% 
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>% 
+  dplyr::mutate(contrast="effectOfMutation_12mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down
+  ) %>%
+  dplyr::select(-PropUp, -PropDown)
+
+z_props <- bind_rows(z_props, z_props2)
+z_fry_with_props <- z_props
+
+# join to fry results
+# z_fry_with_props <- gseaResults_mouse_h$indivTest$effectOfMutation_12mth$fry %>%
+#   #dplyr::filter(FDR.Mixed < 0.05) %>%
+#   dplyr::select(Geneset) %>%
+#   left_join(z_props)
+
+z_fry_with_props
+
+
+
+# create the plot
+# adapted from https://stackoverflow.com/questions/4559229/drawing-pyramid-plot-using-r-and-ggplot2
+butterfly <- bind_rows(x_fry_with_props, y_fry_with_props, z_fry_with_props) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, pattern = "_", replacement = " "),
+                Geneset = gsub(x = Geneset, pattern = "HALLMARK", replacement = "")) %>%
+  reshape2::melt(id.vars=c("Geneset","NGenes","contrast")) %>%
+  dplyr::arrange(desc(NGenes)) %>% 
+  dplyr::rename(direction = variable, ngenes = value) %>%
+  dplyr::mutate(Geneset = factor(Geneset, levels = unique(Geneset)),
+                direction = factor(direction, levels = c("notSig", "down", "up")),
+                contrast = factor(contrast, levels = c("effectOfMutation_3mth","effectOfMutation_6mth", "effectOfMutation_12mth"))) %>%
+  ggplot(aes(x = Geneset, y = ngenes, fill = direction)) +
+  geom_col(width=0.6) +
+  facet_wrap(~contrast, scales = "free") +
+  #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
+  scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
+  coord_flip() +
+  theme(axis.line.y = element_blank())
+
+
+
+butterfly
+
+export::graph2ppt(butterfly, here("R/Mouse/fig/butterfly_effectOfMutation"))
+```
+
+
