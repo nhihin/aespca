@@ -1,0 +1,398 @@
+---
+title: "GSEA on mouse datasets"
+author: "Nhi Hin"
+date: "2020-05-18"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r Setup, include=FALSE}
+library(GSEABase)
+library(dplyr)
+library(readr)
+library(magrittr)
+library(tibble)
+library(reshape2)
+library(fgsea)
+library(ggplot2)
+library(biomaRt)
+library(limma)
+library(here)
+library(stringr)
+library(openxlsx)
+library(pheatmap)
+library(export)
+```
+```{r functions, include=FALSE}
+# The write.fit function is originally from the limma package. It writes
+# out the fit object and results as a table. Below I have just modified it 
+# to not write out a table and have it in R as a data.frame. 
+write_fit <- function(fit, results=NULL, 
+                      F.adjust="none", adjust="fdr", method="global", ...) {
+    if (!is(fit, "MArrayLM")) 
+        stop("fit should be an MArrayLM object")
+    if (!is.null(results) && !is(results, "TestResults")) 
+        stop("results should be a TestResults object")
+    if (is.null(fit$t) || is.null(fit$p.value)) 
+        fit <- eBayes(fit)
+    method <- match.arg(method, c("separate", "global"))
+    p.value <- as.matrix(fit$p.value)
+    if (adjust == "none") {
+        p.value.adj <- NULL
+    }
+    else {
+        p.value.adj <- p.value
+        if (method == "separate") 
+            for (j in 1:ncol(p.value)) p.value.adj[, j] <- p.adjust(p.value[, 
+                j], method = adjust)
+        if (method == "global") 
+            p.value.adj[] <- p.adjust(p.value, method = adjust)
+    }
+    if (F.adjust == "none" || is.null(fit$F.p.value)) 
+        F.p.value.adj <- NULL
+    else F.p.value.adj <- p.adjust(fit$F.p.value, method = F.adjust)
+    
+    tab <- list()
+    tab$A <- (fit$Amean)
+    tab$Coef <- (fit$coef)
+    tab$t <- (fit$t)
+    tab$p.value <- (p.value)
+    tab$p.value.adj <- (p.value.adj)
+    tab$F <- (fit$F)
+    tab$F.p.value <- (fit$F.p.value)
+    tab$F.p.value.adj <- F.p.value.adj
+    tab$Res <- unclass(results)
+    tab$Genes <- fit$genes
+    tab <- data.frame(tab, check.names = FALSE)
+    return(tab)
+}
+```
+
+## 1. DE Analysis using Limma
+
+### 1.1. Import in DGEList objects
+
+```{r}
+# Dataset 1
+dge_GSE97113 <- readRDS(here("data", "datasets", "mouse", 
+                             "GSE97113", "dge.rds"))
+dge_GSE97113$samples %<>% 
+  mutate(group = paste0("mths", age, "_", genotype)) 
+
+# Dataset 2
+dge_GSE140286 <- readRDS(here("data", "datasets", "mouse",
+                              "GSE140286", "dge.rds"))
+dge_GSE140286$samples %<>% 
+  mutate(group = paste0("mths", age, "_", genotype))
+
+# Dataset 3
+dge_GSE142633 <- readRDS(here("data", "datasets", "mouse",
+                              "GSE142633", "dge.rds"))
+dge_GSE142633$samples %<>% 
+  mutate(group = paste0("mths", age, "_", genotype))
+```
+
+
+### 1.2. DE Analysis for `GSE97113`:
+
+```{r}
+design_1 <- model.matrix(~0 + group + sex, data = dge_GSE97113$samples) %>%
+  set_colnames(gsub(pattern = "group", replacement = "", x = colnames(.))) 
+
+voomData_1 <- voomWithQualityWeights(dge_GSE97113, design = design_1, plot = TRUE)
+
+contrasts_1 <- makeContrasts(
+  levels = colnames(design_1), 
+  # Effect of aging in 5XFAD mice
+  mutantAging_4mth_vs_2mth = mths4_5XFAD - mths2_5XFAD,
+  mutantAging_4mth_vs_1mth = mths4_5XFAD - mths1_5XFAD,
+  mutantAging_2mth_vs_1mth = mths2_5XFAD - mths1_5XFAD
+)
+
+fit_1 <- lmFit(voomData_1, design_1) %>%
+  contrasts.fit(contrasts_1) %>%
+  eBayes(robust = TRUE)
+
+results_1 <- decideTests(fit_1, 
+                         p.value = 0.05, 
+                         adjust.method = "fdr", 
+                         method = "global") # Adjust pvalues across all contrasts
+
+# Number of DE genes in each comparison (contrast):
+summary(results_1)
+
+# Quick overlap
+vennCounts(results_1)
+
+write_fit_1 <- write_fit(fit_1, 
+                         results_1, 
+                         method = "global", 
+                         adjust = "fdr")
+```
+
+**Notes**:
+
+- There are 174 genes which are shared between all comparisons, suggesting 
+they could be indicative of aging in general (in 5XFAD brains). 
+
+
+### 1.3. DE Analysis for `GSE140286`:
+
+```{r}
+design_2 <- model.matrix(~0 + group + sex, data = dge_GSE140286$samples) %>%
+  set_colnames(gsub(pattern = "group", replacement = "", x = colnames(.))) 
+
+voomData_2 <- voomWithQualityWeights(dge_GSE140286, design = design_2, plot = TRUE)
+
+contrasts_2 <- makeContrasts(
+  levels = colnames(design_2), 
+  #Effect of 5XFAD genotype (age constant)
+  effectOf5XFAD_12mth = mths12_5XFAD - mths12_WT,
+  effectOf5XFAD_6mth = mths6_5XFAD - mths6_WT,
+  effectOf5XFAD_3mth = mths3_5XFAD - mths3_WT,
+  # Effect of aging in wild types
+  aging_WT_12vs6mth = mths12_WT - mths6_WT,
+  aging_WT_12vs3mth = mths12_WT - mths3_WT,
+  aging_WT_6vs3mth = mths6_WT - mths3_WT,
+  # Effect of aging in 5XFAD mutants
+  aging_5XFAD_12vs6mth = mths12_5XFAD - mths6_5XFAD,
+  aging_5XFAD_12vs3mth = mths12_5XFAD - mths3_5XFAD,
+  aging_5XFAD_6vs3mth = mths6_5XFAD - mths3_5XFAD
+)
+
+fit_2 <- lmFit(voomData_2, design_2) %>%
+  contrasts.fit(contrasts_2) %>%
+  eBayes(robust = TRUE)
+
+results_2 <- decideTests(fit_2, 
+                         p.value = 0.05, 
+                         adjust.method = "fdr", 
+                         method = "global") # Adjust pvalues across all contrasts
+
+# Number of DE genes in each comparison (contrast):
+summary(results_2)
+
+
+write_fit_2 <- write_fit(fit_2, 
+                         results_2, 
+                         method = "global", 
+                         adjust = "fdr")
+```
+
+- In general this dataset shows very little differential expression at 3 
+months for the 5XFAD vs WT. However, there are many up-regulated genes 
+at 6 months and at 12 months. 
+
+
+
+### 1.4. DE Analysis for `GSE142633`:
+
+```{r}
+design_3 <- model.matrix(~0 + group + sex, data = dge_GSE142633$samples) %>%
+  set_colnames(gsub(pattern = "group", replacement = "", x = colnames(.))) 
+
+voomData_3 <- voomWithQualityWeights(dge_GSE142633, design = design_3, 
+                                     plot = TRUE)
+
+contrasts_3 <- makeContrasts(
+  levels = colnames(design_3), 
+  # Effect of 5XFAD
+  effectOf5XFAD_11mth = mths11_5XFAD - mths11_WT,
+  effectOf5XFAD_6mth = mths6_5XFAD - mths6_WT,
+  # Effect of aging
+  aging_5XFAD_11vs6mth = mths11_5XFAD - mths6_5XFAD,
+  aging_WT_11vs6mth = mths11_WT - mths6_WT
+)
+
+fit_3 <- lmFit(voomData_3, design_3) %>%
+  contrasts.fit(contrasts_3) %>%
+  eBayes(robust = TRUE)
+
+results_3 <- decideTests(fit_3, 
+                         p.value = 0.05, 
+                         adjust.method = "fdr", 
+                         method = "global") # Adjust pvalues across all contrasts
+
+# Number of DE genes in each comparison (contrast):
+summary(results_3)
+
+write_fit_3 <- write_fit(fit_3, 
+                         results_3, 
+                         method = "global", 
+                         adjust = "fdr")
+```
+
+
+
+
+
+## 2. Running GSEA
+
+### 2.1. Import in MSigDB Genesets
+
+```{r}
+mouGenesets <- file.path(here("data", "genesets", "mouse"))
+
+h_mapped <- readRDS(file.path(mouGenesets, "ens_h_mapped.rds"))
+c1_mapped <- readRDS(file.path(mouGenesets, "ens_c1_mapped.rds"))
+c2_mapped <- readRDS(file.path(mouGenesets, "ens_c2_mapped.rds"))
+c3_mapped <- readRDS(file.path(mouGenesets, "ens_c3_mapped.rds"))
+c4_mapped <- readRDS(file.path(mouGenesets, "ens_c4_mapped.rds"))
+c5_mapped <- readRDS(file.path(mouGenesets, "ens_c5_mapped.rds"))
+c6_mapped <- readRDS(file.path(mouGenesets, "ens_c6_mapped.rds"))
+c7_mapped <- readRDS(file.path(mouGenesets, "ens_c7_mapped.rds"))
+```
+
+### 2.2. Build indexes for each voom object
+
+```{r}
+buildGenesetIndex <- function(x, voomObj = v){
+  limma::ids2indices(x, rownames(voomObj))
+}
+```
+
+```{r}
+GSE97113_idx <- list(
+  h_idx = buildGenesetIndex(h_mapped, voomData_1),
+  c1_idx = buildGenesetIndex(c1_mapped, voomData_1),
+  c2_idx = buildGenesetIndex(c2_mapped, voomData_1),
+  c3_idx = buildGenesetIndex(c3_mapped, voomData_1),
+  c4_idx = buildGenesetIndex(c4_mapped, voomData_1),
+  c5_idx = buildGenesetIndex(c5_mapped, voomData_1),
+  c6_idx = buildGenesetIndex(c6_mapped, voomData_1),
+  c7_idx = buildGenesetIndex(c7_mapped, voomData_1)
+)
+```
+
+```{r}
+GSE140286_idx <- list(
+  h_idx = buildGenesetIndex(h_mapped, voomData_2),
+  c1_idx = buildGenesetIndex(c1_mapped, voomData_2),
+  c2_idx = buildGenesetIndex(c2_mapped, voomData_2),
+  c3_idx = buildGenesetIndex(c3_mapped, voomData_2),
+  c4_idx = buildGenesetIndex(c4_mapped, voomData_2),
+  c5_idx = buildGenesetIndex(c5_mapped, voomData_2),
+  c6_idx = buildGenesetIndex(c6_mapped, voomData_2),
+  c7_idx = buildGenesetIndex(c7_mapped, voomData_2)
+)
+```
+
+```{r}
+GSE142633_idx <- list(
+  h_idx = buildGenesetIndex(h_mapped, voomData_3),
+  c1_idx = buildGenesetIndex(c1_mapped, voomData_3),
+  c2_idx = buildGenesetIndex(c2_mapped, voomData_3),
+  c3_idx = buildGenesetIndex(c3_mapped, voomData_3),
+  c4_idx = buildGenesetIndex(c4_mapped, voomData_3),
+  c5_idx = buildGenesetIndex(c5_mapped, voomData_3),
+  c6_idx = buildGenesetIndex(c6_mapped, voomData_3),
+  c7_idx = buildGenesetIndex(c7_mapped, voomData_3)
+)
+```
+
+### 2.3. Run gene set enrichment testing
+
+- Includes:
+    - *fry*
+    - *fgsea*
+    - *camera*
+- Raw p-values combined with Wilksinson's method (r=1)
+- Significance defined as Bonferroni-adjusted p-value < 0.05.
+
+```{r}
+source(here("code","combinedGSEA.R"))
+```
+
+### 2.4. Running GSEA
+
+- For an initial overview of how comparable the different datasets were, 
+only the Hallmark collection of gene sets was run for each of the datasets. 
+
+```{r}
+GSE97113_gseaResults_h <- combinedGSEA(voomData_1, 
+                                       GSE97113_idx$h_idx,
+                                       design_1, contrasts_1)
+
+GSE140286_gseaResults_h <- combinedGSEA(voomData_2, 
+                                       GSE140286_idx$h_idx,
+                                       design_2, contrasts_2)
+
+GSE142633_gseaResults_h <- combinedGSEA(voomData_3, 
+                                       GSE142633_idx$h_idx,
+                                       design_3, contrasts_3)
+
+```
+
+## 3. Results
+
+```{r}
+GSE97113_gseaResults_h$combTest
+```
+
+```{r}
+GSE140286_gseaResults_h$combTest
+```
+
+```{r}
+GSE142633_gseaResults_h$combTest
+```
+
+- Overall, the aging of WT (and aging of 5XFAD) brains appear to pull up 
+similar gene sets being enriched. 
+
+```{r}
+GSE140286_gseaResults_h$combTest$aging_5XFAD_12vs6mth %>%
+  dplyr::filter(bonferroni < 0.05)
+GSE142633_gseaResults_h$combTest$aging_5XFAD_11vs6mth %>%
+  dplyr::filter(bonferroni < 0.05) %>%
+  dplyr::slice(1:17)
+```
+
+- Effect of 5XFAD mutation also seems consistent across datasets:
+
+```{r}
+GSE140286_gseaResults_h$combTest$effectOf5XFAD_12mth %>%
+  dplyr::filter(bonferroni < 0.05)
+GSE142633_gseaResults_h$combTest$effectOf5XFAD_11mth%>%
+  dplyr::filter(bonferroni < 0.05)
+```
+
+```{r}
+GSE140286_gseaResults_h$combTest$effectOf5XFAD_6mth%>%
+  dplyr::filter(bonferroni < 0.05)
+GSE142633_gseaResults_h$combTest$effectOf5XFAD_6mth%>%
+  dplyr::filter(bonferroni < 0.05)
+```
+
+- Despite the clear batches in the original PCA of all datasets, when analysing 
+the datasets separately, the equivalent comparisons indicate that the 
+biological processes significantly enriched in 5XFAD brains appear to be 
+consistent. 
+
+## Export Objects
+
+- DE results
+
+```{r}
+write_fit_1 %>% saveRDS(here("data", "datasets", "mouse", 
+                             "GSE97113", "write_fit_1.rds"))
+
+write_fit_2 %>% saveRDS(here("data", "datasets", "mouse", 
+                             "GSE140286", "write_fit_2.rds"))
+
+write_fit_3 %>% saveRDS(here("data", "datasets", "mouse", 
+                             "GSE142633", "write_fit_3.rds"))
+```
+
+- GSEA Results using Hallmark Collection
+
+```{r}
+saveRDS(GSE97113_gseaResults_h, here("data", "datasets", "mouse", 
+                             "GSE97113", "gsea.rds"))
+saveRDS(GSE140286_gseaResults_h, here("data", "datasets", "mouse", 
+                             "GSE140286", "gsea.rds"))
+saveRDS(GSE142633_gseaResults_h, here("data", "datasets", "mouse", 
+                             "GSE142633", "gsea.rds"))
+```
+
