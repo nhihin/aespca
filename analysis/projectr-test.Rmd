@@ -1,0 +1,298 @@
+---
+title: "Testing ProjectR on the fAD-like zebrafish dataset"
+author: "Nhi Hin"
+date: "2020-05-21"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r load-packages, include=FALSE}
+library(CoGAPS)
+library(projectR)
+library(here)
+library(tibble)
+library(ggplot2)
+library(dplyr)
+library(sva)
+library(magrittr)
+theme_set(theme_bw())
+```
+
+
+
+## Introduction
+
+- [CoGAPS](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3025742/) is based 
+on a matrix factorisation algorithm known as **Markov chain Monte Carlo (MCMC) 
+matrix factorization**. This is different to the matrix factorisation 
+approach that the PLIER / MultiPLIER approach use. 
+
+- Purpose of this current analysis is to see if CoGAPS can come up with 
+any latent variables able to distinguish between the biological conditions 
+in our zebrafish dataset. If it can, we will then project these across into 
+the mouse datasets (potentially human dataset). 
+
+## 1. Import Dataset
+
+- Need to prepare a counts matrix with no negative values to perform 
+CoGAPs:
+
+```{r}
+dge_zeb <- readRDS(here("data", "datasets", "zebrafish", "dge.rds"))
+dge_zeb
+
+counts_nn <- dge_zeb %>% cpm(log=TRUE) 
+
+# Are there values which are < 0?
+sum(counts_nn < 0)
+
+# majority of values are > 0
+sum(counts_nn > 0)
+
+# Filter out the rows containing negative values as these are likely 
+# to be low expressed anyway, and the matrix factorisation used in 
+# Cogaps will not accept them.
+counts_nn_filt <- counts_nn[!rowSums(counts_nn < 0),] # 16,847 genes left
+```
+
+- From the original number of genes (`r nrow(counts_nn)` genes), after 
+filtering out rows with negative values (due to log2 transformation + 
+normalisation), there are `r nrow(counts_nn_filt)` genes which we 
+will proceed with. 
+
+## 2. Running CoGAPS
+
+- Run CoGAPS with default settings 
+
+```{r}
+cogaps_def <- CoGAPS(as.matrix(counts_nn_filt), nIterations = 1000)
+```
+
+- Quick heatmap to view the patterns (latent variables) found by CoGAPs. 
+(Default number of patterns = 7)
+
+```{r}
+cogaps_def@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- Two of the patterns (**1** and **5**) don't give any information at all. 
+Maybe these are the genes which 
+
+- Pattern **2** seems to capture age and hypoxia to an extent. 
+
+- Pattern **3** and **6** capture information about age. Pattern **7** also 
+shows some promise although it is quite a bit noisier. 
+
+
+## 3. Tuning parameters
+
+- Instead of using the default parameters, will try out different 
+parameters. First need to set up a `CogapsParams` object.
+
+- The most important parameter seems to be `nPatterns` which controls 
+how many latent variables will be made from the input data. We 
+will do a quick sweep to see what a good number of LVs could be. 
+
+- Keep the iterations at `1000` for now, but for the final results will need 
+to use something more like `10000` according to the vignette to ensure the 
+LVs are stable. 
+
+```{r}
+# Create new CogapsParams object
+params <- new("CogapsParams")
+params # defaultparameters
+
+# Quick sweep to see how many patterns / LVs is ideal
+# Each run takes 2-3 mins to run so below takes <20 mins
+npatterns <- c(3,5,7,10,12,15,18,25) 
+cogaps_nPatterns <- list()
+for (i in npatterns){
+  params <- setParam(params, "nPatterns", i) #change the number of patterns/LVs
+  cogaps_nPatterns[i] <- CoGAPS(as.matrix(counts_nn_filt),
+                                params, nIterations = 1000)
+}
+```
+
+- Plotting heatmaps starting with lowest `nPatterns = 3`
+
+```{r}
+cogaps_nPatterns[[3]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 5`
+
+```{r}
+cogaps_nPatterns[[5]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 10` (almost perfect separation of hypoxia vs. normoxia)
+
+```{r}
+cogaps_nPatterns[[10]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 12`
+
+```{r}
+cogaps_nPatterns[[12]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 15` (getting messy)
+
+```{r}
+cogaps_nPatterns[[15]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 18` (back to age being the main variation detected..)
+
+```{r}
+cogaps_nPatterns[[18]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 25` (not really interpretable at this point..)
+
+```{r}
+cogaps_nPatterns[[25]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+
+## 4. IRE Genes
+
+- In the CoGAPS vignette, the example uses only ~1300 genes to perform the 
+CoGAPs algorithm on. At the moment we are performing it on ~16,000 genes. 
+
+- Wanted to test whether pre-filtering / only including subset of genes 
+might help to refine and get better results. 
+
+- The IRE gene set we defined in our previous work contains quite a 
+large number of genes (especially in the 3' IRE set ~1200 genes). 
+Could try and see if there are particular subsets that are active in 
+the different conditions (e.g. age, hypoxia, etc.). 
+
+- First load in the IRE gene sets determined for zebrafish:
+
+```{r}
+ireGenes <- readRDS(here("data", "genesets", "zebrafish", "ireGenes.rds"))
+```
+
+- First we will try just using the **All 3' IREs** set, which contains 
+`r length(ireGenes$all3ire)` genes and is the largest gene set of the 
+IRE gene sets (**All 3' IREs**, **All 5' IREs**, 
+**HQ 3' IREs**, **HQ 5' IREs**), 
+
+- Because this is a smaller number of genes, would expect that the number 
+of LVs is also on the smaller side as well. We will try a quick sweep of 
+values to see if there's anything interesting. 
+
+```{r}
+counts_nn_filt_3ires <- counts_nn_filt %>%
+  as.data.frame %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  dplyr::filter(ensembl_gene_id %in% ireGenes$ire3_all) %>%
+  column_to_rownames("ensembl_gene_id") %>%
+  as.matrix()
+#counts_nn_filt_3ires <- counts_nn_filt_3ires[, c(1:4, 9:12)]
+
+rm(params)
+params <- new("CogapsParams")
+npatterns <- c(3,5,7,10) 
+cogaps_nPatterns_3ires <- list()
+for (i in npatterns){
+  params <- setParam(params, "nPatterns", i) #change the number of patterns/LVs
+  cogaps_nPatterns_3ires[i] <- CoGAPS(as.matrix(counts_nn_filt_3ires),
+                                params, nIterations = 1000)
+}
+
+```
+
+- Although some of the LVs distinguish between age groups and hypoxia/normoxia 
+none can capture the variation between mutant and wild type genotypes at all. 
+This would suggest that the difference between mutant and wild type gene 
+expression is quite subtle and difficult to retain through dimension reduction. 
+
+```{r}
+cogaps_nPatterns_3ires[[3]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_3ires[[5]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_3ires[[7]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+#cogaps_nPatterns_3ires[[10]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- Testing all of the IRE genes (3 and 5' together)
+
+```{r}
+counts_nn_filt_allires <- counts_nn_filt %>%
+  as.data.frame %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  dplyr::filter(ensembl_gene_id %in% ireGenes$ire3_all |
+                  ensembl_gene_id %in% ireGenes$ire5_all) %>%
+  column_to_rownames("ensembl_gene_id") %>%
+  as.matrix()
+
+rm(params)
+params <- new("CogapsParams")
+npatterns <- c(3,5,7,10) 
+cogaps_nPatterns_allires <- list()
+for (i in npatterns){
+  params <- setParam(params, "nPatterns", i) #change the number of patterns/LVs
+  cogaps_nPatterns_allires[i] <- CoGAPS(as.matrix(counts_nn_filt_allires),
+                                params, nIterations = 10000)
+}
+```
+
+- The LVs don't look super convincing here either... although they can 
+clearly separate out age probably as the gene expression effects of aging 
+are just so prominent compared to the hypoxia/normoxia and mutation. 
+
+```{r}
+cogaps_nPatterns_allires[[3]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_allires[[5]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_allires[[7]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_allires[[10]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- Does it make a difference limiting the samples (subset to only 6 month old)
+
+```{r}
+counts_nn_filt_allires <- counts_nn_filt_allires[, c(1:4, 9:12)]
+
+rm(params)
+params <- new("CogapsParams")
+npatterns <- c(3,5,7,10) 
+cogaps_nPatterns_allires <- list()
+for (i in npatterns){
+  params <- setParam(params, "nPatterns", i) #change the number of patterns/LVs
+  cogaps_nPatterns_allires[i] <- CoGAPS(as.matrix(counts_nn_filt_allires),
+                                params, nIterations = 10000)
+}
+
+cogaps_nPatterns_allires[[3]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_allires[[5]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_allires[[7]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+cogaps_nPatterns_allires[[10]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- While there almost seems to be something in the LVs separating mutants and WT 
+with `nPatterns = 3`, there is one clear sample which doesn't follow the same 
+pattern and overall it just doesn't look very convincing. 
+
+## Next Steps
+
+- For this particular dataset, CoGAPs performed better than MultiPLIER. 
+
+- The CoGAPS approach was easily able to pick out LVs that corresponded to age 
+and even hypoxia. However, no LVs clearly corresponded to genotype, indicating 
+that the Q96_K97del/+ mutation's effects on gene expression are subtle and 
+that the current matrix factorisation approach doesn't seem to be sensitive enough 
+to capture this pattern. 
+
+- Because both CoGAPS and MultiPLIER had trouble picking up the differences between 
+mutant and WT, their utility in our analysis is limited as it is these 
+subtle effects we are really interested in. Will likely leave these behind 
+for now and look for alternate approaches. 
+
+- Potentially there are some subsets in the IRE genes which behave 
+differently in the different conditions. CoGAPs generally found that there 
+are two main groupings - IRE genes which are increased in expression with age 
+and ones which are decreased in expression with age. The expression varied with 
+age only and not hypoxia/normoxia or mutation. This is also not super useful. 
