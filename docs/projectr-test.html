@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Nhi Hin" />
+
+<meta name="date" content="2020-05-21" />
+
+<title>Testing ProjectR on the fAD-like zebrafish dataset</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/master/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 51px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h2 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h3 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h4 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h5 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h6 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #ffffff;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row-fluid">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">mousevsfish</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="about.html">About</a>
+</li>
+<li>
+  <a href="license.html">License</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Testing ProjectR on the fAD-like zebrafish dataset</h1>
+<h4 class="author">Nhi Hin</h4>
+<h4 class="date">2020-05-21</h4>
+
+</div>
+
+
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
+<span class="glyphicon glyphicon-list" aria-hidden="true"></span> workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span>
+</button>
+</p>
+<div id="workflowr-report" class="collapse">
+<ul class="nav nav-tabs">
+<li class="active">
+<a data-toggle="tab" href="#summary">Summary</a>
+</li>
+<li>
+<a data-toggle="tab" href="#checks"> Checks <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> </a>
+</li>
+<li>
+<a data-toggle="tab" href="#versions">Past versions</a>
+</li>
+</ul>
+<div class="tab-content">
+<div id="summary" class="tab-pane fade in active">
+<p>
+<strong>Last updated:</strong> 2020-05-27
+</p>
+<p>
+<strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 6 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 1
+</p>
+<p>
+<strong>Knit directory:</strong> <code>mousevsfish/</code> <span class="glyphicon glyphicon-question-sign" aria-hidden="true" title="This is the local directory in which the code in this file was executed."> </span>
+</p>
+<p>
+This reproducible <a href="http://rmarkdown.rstudio.com">R Markdown</a> analysis was created with <a
+  href="https://github.com/jdblischak/workflowr">workflowr</a> (version 1.6.2). The <em>Checks</em> tab describes the reproducibility checks that were applied when the results were created. The <em>Past versions</em> tab lists the development history.
+</p>
+<hr>
+</div>
+<div id="checks" class="tab-pane fade">
+<div id="workflowr-checks" class="panel-group">
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges"> <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted changes </a>
+</p>
+</div>
+<div id="strongRMarkdownfilestronguncommittedchanges" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The R Markdown file has unstaged changes. To know which version of the R Markdown file created these results, you’ll want to first commit it to the Git repo. If you’re still working on the analysis, you can ignore this warning. When you’re finished, you can run <code>wflow_publish</code> to commit the R Markdown file and build the HTML.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongEnvironmentstrongempty"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Environment:</strong> empty </a>
+</p>
+</div>
+<div id="strongEnvironmentstrongempty" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! The global environment was empty. Objects defined in the global environment can affect the analysis in your R Markdown file in unknown ways. For reproduciblity it’s best to always run the code in an empty environment.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSeedstrongcodesetseed20200504code"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Seed:</strong> <code>set.seed(20200504)</code> </a>
+</p>
+</div>
+<div id="strongSeedstrongcodesetseed20200504code" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The command <code>set.seed(20200504)</code> was run prior to running the code in the R Markdown file. Setting a seed ensures that any results that rely on randomness, e.g. subsampling or permutations, are reproducible.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSessioninformationstrongrecorded"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Session information:</strong> recorded </a>
+</p>
+</div>
+<div id="strongSessioninformationstrongrecorded" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Recording the operating system, R version, and package versions is critical for reproducibility.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongCachestrongnone"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Cache:</strong> none </a>
+</p>
+</div>
+<div id="strongCachestrongnone" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Nice! There were no cached chunks for this analysis, so you can be confident that you successfully produced the results during this run.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongFilepathsstrongrelative"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>File paths:</strong> relative </a>
+</p>
+</div>
+<div id="strongFilepathsstrongrelative" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Using relative paths to the files within your workflowr project makes it easier to run your code on other machines.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomnhihinmousevsfishtree58ebf97f90901d504db30918034c963b2b328644targetblank58ebf97a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/nhihin/mousevsfish/tree/58ebf97f90901d504db30918034c963b2b328644" target="_blank">58ebf97</a> </a>
+</p>
+</div>
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomnhihinmousevsfishtree58ebf97f90901d504db30918034c963b2b328644targetblank58ebf97a" class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
+</p>
+<p>
+The results in this page were generated with repository version <a href="https://github.com/nhihin/mousevsfish/tree/58ebf97f90901d504db30918034c963b2b328644" target="_blank">58ebf97</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+</p>
+<p>
+Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
+</p>
+<pre><code>
+Ignored files:
+    Ignored:    .Rhistory
+    Ignored:    .Rproj.user/
+    Ignored:    analysis/figure/
+    Ignored:    data/.DS_Store
+    Ignored:    data/datasets/.DS_Store
+    Ignored:    data/datasets/mouse/.DS_Store
+    Ignored:    data/datasets/mouse/kallisto/.DS_Store
+    Ignored:    data/de/
+    Ignored:    data/genesets/.DS_Store
+    Ignored:    data/multiplier/.DS_Store
+
+Untracked files:
+    Untracked:  analysis/fba-test.Rmd
+    Untracked:  data/enrichment/
+    Untracked:  ~$notes.docx
+
+Unstaged changes:
+    Modified:   analysis/projectr-test.Rmd
+
+</code></pre>
+<p>
+Note that any generated files, e.g. HTML, png, CSS, etc., are not included in this status report because it is ok for generated content to have uncommitted changes.
+</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+</div>
+<div id="versions" class="tab-pane fade">
+
+<p>
+These are the previous versions of the repository in which changes were made to the R Markdown (<code>analysis/projectr-test.Rmd</code>) and HTML (<code>docs/projectr-test.html</code>) files. If you’ve configured a remote Git repository (see <code>?wflow_git_remote</code>), click on the hyperlinks in the table below to view the files as they were in that past version.
+</p>
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+File
+</th>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+<th>
+Message
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/nhihin/mousevsfish/blob/4b7fe61f73b106932bd2e94867e6ae76f766066e/analysis/projectr-test.Rmd" target="_blank">4b7fe61</a>
+</td>
+<td>
+Nhi Hin
+</td>
+<td>
+2020-05-25
+</td>
+<td>
+testing out matrix factorisation methods
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<hr>
+</div>
+</div>
+</div>
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<ul>
+<li><p><a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3025742/">CoGAPS</a> is based on a matrix factorisation algorithm known as <strong>Markov chain Monte Carlo (MCMC) matrix factorization</strong>. This is different to the matrix factorisation approach that the PLIER / MultiPLIER approach use.</p></li>
+<li><p>Purpose of this current analysis is to see if CoGAPS can come up with any latent variables able to distinguish between the biological conditions in our zebrafish dataset. If it can, we will then project these across into the mouse datasets (potentially human dataset).</p></li>
+</ul>
+</div>
+<div id="import-dataset" class="section level2">
+<h2>1. Import Dataset</h2>
+<ul>
+<li>Need to prepare a counts matrix with no negative values to perform CoGAPs:</li>
+</ul>
+<pre class="r"><code>dge_zeb &lt;- readRDS(here(&quot;data&quot;, &quot;datasets&quot;, &quot;zebrafish&quot;, &quot;dge.rds&quot;))
+dge_zeb</code></pre>
+<pre><code>An object of class &quot;DGEList&quot;
+$counts
+                   wt_6_0_1  wt_6_0_2  wt_6_0_3  wt_6_0_4 wt_6_1_2  wt_6_1_3
+ENSDARG00000000001  196.907  336.3001  262.9228  220.8249  249.864  463.4722
+ENSDARG00000000002  131.093  217.6999  170.0772  167.1751  141.136  273.5278
+ENSDARG00000000018  592.000 1065.0000  752.0000  829.0000  795.000 1241.0000
+ENSDARG00000000019 3204.000 5108.0000 3561.0000 3872.0000 3405.000 5793.0000
+ENSDARG00000000068  217.000  441.0000  302.0000  285.0000  326.000  535.0000
+                    wt_6_1_4  wt_6_1_1 q96_6_0_1 q96_6_0_2 q96_6_0_3 q96_6_0_4
+ENSDARG00000000001  214.2697  214.6166  159.6455  175.8766  256.9751  140.6898
+ENSDARG00000000002  303.7303  149.3834  194.3545  137.1234  165.0249  133.3102
+ENSDARG00000000018  913.0000  828.0000  621.0000  586.0000  800.0000  569.0000
+ENSDARG00000000019 4741.0000 3694.0000 3164.0000 3247.0000 4069.0000 3281.0000
+ENSDARG00000000068  342.0000  297.0000  243.0000  233.0000  288.0000  180.0000
+                   q96_6_1_1 q96_6_1_2 q96_6_1_3 q96_6_1_4 wt_24_0_1 wt_24_0_2
+ENSDARG00000000001  390.0253   241.329  258.7419  249.4515  314.1703  330.8257
+ENSDARG00000000002  292.9747   268.671  250.2581  231.5485  410.8297  330.1743
+ENSDARG00000000018 1475.0000   864.000  925.0000  966.0000  790.0000  948.0000
+ENSDARG00000000019 5717.0000  4464.000 4666.0000 4517.0000 4693.0000 4229.0000
+ENSDARG00000000068  503.0000   330.000  367.0000  374.0000  398.0000  457.0000
+                   wt_24_0_3 wt_24_0_4 wt_24_1_1 wt_24_1_2 wt_24_1_3 wt_24_1_4
+ENSDARG00000000001  286.3625  273.4969  287.6616  319.7387  255.3742  222.8791
+ENSDARG00000000002  389.6375  353.5031  222.3384  319.2613  245.6258  312.1209
+ENSDARG00000000018  838.0000  829.0000  761.0000  876.0000  767.0000  823.0000
+ENSDARG00000000019 4344.0000 4888.0000 3830.0000 3830.0000 3809.0000 4375.0000
+ENSDARG00000000068  444.0000  444.0000  369.0000  364.0000  429.0000  295.0000
+                   q96_24_0_1 q96_24_0_2 q96_24_0_3 q96_24_0_4 q96_24_1_1
+ENSDARG00000000001   276.1545   218.8831   235.3858   188.8943   144.7541
+ENSDARG00000000002   319.8455   330.1169   424.6142   327.1057   402.2459
+ENSDARG00000000018   886.0000   717.0000   775.0000   728.0000   667.0000
+ENSDARG00000000019  4864.0000  3647.0000  4772.0000  4603.0000  3720.0000
+ENSDARG00000000068   397.0000   389.0000   360.0000   351.0000   367.0000
+                   q96_24_1_2 q96_24_1_3 q96_24_1_4
+ENSDARG00000000001   259.8351   199.8374   189.1448
+ENSDARG00000000002   293.1649   356.1626   343.8552
+ENSDARG00000000018   863.0000   777.0000   709.0000
+ENSDARG00000000019  4032.0000  4082.0000  3378.0000
+ENSDARG00000000068   396.0000   281.0000   287.0000
+25025 more rows ...
+
+$samples
+         group lib.size norm.factors
+wt_6_0_1     1 17342614     0.995341
+wt_6_0_2     1 30040365     1.013081
+wt_6_0_3     1 19329223     1.018137
+wt_6_0_4     1 20498892     1.008803
+wt_6_1_2     1 19930475     1.026132
+                                                                                                        path
+wt_6_0_1  /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/1_MORGAN_6P_PN1_S2_R1_001
+wt_6_0_2  /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/2_MORGAN_6P_PN2_S5_R1_001
+wt_6_0_3 /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/3_MORGAN_6P_PN3_S10_R1_001
+wt_6_0_4  /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/4_MORGAN_6P_PN4_S8_R1_001
+wt_6_1_2 /Volumes/biohub/20170906_Morgan_Hypoxia/3_quantifiedData/transcriptLevel/10_MORGAN_6P_PH2_S9_R1_001
+                           basename     id Age Genotype Hypoxia Gender  Group
+wt_6_0_1  1_MORGAN_6P_PN1_S2_R1_001 6P_PN1   6       wt       0   male wt_6_0
+wt_6_0_2  2_MORGAN_6P_PN2_S5_R1_001 6P_PN2   6       wt       0 female wt_6_0
+wt_6_0_3 3_MORGAN_6P_PN3_S10_R1_001 6P_PN3   6       wt       0 female wt_6_0
+wt_6_0_4  4_MORGAN_6P_PN4_S8_R1_001 6P_PN4   6       wt       0 female wt_6_0
+wt_6_1_2 10_MORGAN_6P_PH2_S9_R1_001 6P_PH2   6       wt       1 female wt_6_1
+           sample
+wt_6_0_1 wt_6_0_1
+wt_6_0_2 wt_6_0_2
+wt_6_0_3 wt_6_0_3
+wt_6_0_4 wt_6_0_4
+wt_6_1_2 wt_6_1_2
+27 more rows ...
+
+$genes
+                      ensembl_gene_id gene_name   gene_biotype entrezid
+ENSDARG00000000001 ENSDARG00000000001   slc35a5 protein_coding   368418
+ENSDARG00000000002 ENSDARG00000000002    ccdc80 protein_coding   368419
+ENSDARG00000000018 ENSDARG00000000018      nrf1 protein_coding    64604
+ENSDARG00000000019 ENSDARG00000000019     ube2h protein_coding   368425
+ENSDARG00000000068 ENSDARG00000000068 slc9a3r1a protein_coding   327272
+                                                                                                                                          description
+ENSDARG00000000001                                                           solute carrier family 35, member A5 [Source:ZFIN;Acc:ZDB-GENE-030616-55]
+ENSDARG00000000002                                                              coiled-coil domain containing 80 [Source:ZFIN;Acc:ZDB-GENE-030616-56]
+ENSDARG00000000018                                                                   nuclear respiratory factor 1 [Source:ZFIN;Acc:ZDB-GENE-001221-1]
+ENSDARG00000000019                                        ubiquitin-conjugating enzyme E2H (UBC8 homolog, yeast) [Source:ZFIN;Acc:ZDB-GENE-030616-67]
+ENSDARG00000000068 solute carrier family 9, subfamily A (NHE3, cation proton antiporter 3), member 3 regulator 1a [Source:ZFIN;Acc:ZDB-GENE-031006-7]
+25025 more rows ...</code></pre>
+<pre class="r"><code>counts_nn &lt;- dge_zeb %&gt;% cpm(log=TRUE) 
+
+# Are there values which are &lt; 0?
+sum(counts_nn &lt; 0)</code></pre>
+<pre><code>[1] 201742</code></pre>
+<pre class="r"><code># majority of values are &gt; 0
+sum(counts_nn &gt; 0)</code></pre>
+<pre><code>[1] 599218</code></pre>
+<pre class="r"><code># Filter out the rows containing negative values as these are likely 
+# to be low expressed anyway, and the matrix factorisation used in 
+# Cogaps will not accept them.
+counts_nn_filt &lt;- counts_nn[!rowSums(counts_nn &lt; 0),] # 16,847 genes left</code></pre>
+<ul>
+<li>From the original number of genes (25030 genes), after filtering out rows with negative values (due to log2 transformation + normalisation), there are 16847 genes which we will proceed with.</li>
+</ul>
+</div>
+<div id="running-cogaps" class="section level2">
+<h2>2. Running CoGAPS</h2>
+<ul>
+<li>Run CoGAPS with default settings</li>
+</ul>
+<pre class="r"><code>cogaps_def &lt;- CoGAPS(as.matrix(counts_nn_filt), nIterations = 1000)</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            7 
+nIterations          1000 
+seed                 517 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<ul>
+<li>Quick heatmap to view the patterns (latent variables) found by CoGAPs. (Default number of patterns = 7)</li>
+</ul>
+<pre class="r"><code>cogaps_def@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-3-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><p>Two of the patterns (<strong>1</strong> and <strong>5</strong>) don’t give any information at all. Maybe these are the genes which</p></li>
+<li><p>Pattern <strong>2</strong> seems to capture age and hypoxia to an extent.</p></li>
+<li><p>Pattern <strong>3</strong> and <strong>6</strong> capture information about age. Pattern <strong>7</strong> also shows some promise although it is quite a bit noisier.</p></li>
+</ul>
+</div>
+<div id="tuning-parameters" class="section level2">
+<h2>3. Tuning parameters</h2>
+<ul>
+<li><p>Instead of using the default parameters, will try out different parameters. First need to set up a <code>CogapsParams</code> object.</p></li>
+<li><p>The most important parameter seems to be <code>nPatterns</code> which controls how many latent variables will be made from the input data. We will do a quick sweep to see what a good number of LVs could be.</p></li>
+<li><p>Keep the iterations at <code>1000</code> for now, but for the final results will need to use something more like <code>10000</code> according to the vignette to ensure the LVs are stable.</p></li>
+</ul>
+<pre class="r"><code># Create new CogapsParams object
+params &lt;- new(&quot;CogapsParams&quot;)
+params # defaultparameters</code></pre>
+<pre><code>-- Standard Parameters --
+nPatterns            7 
+nIterations          50000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre class="r"><code># Quick sweep to see how many patterns / LVs is ideal
+# Each run takes 2-3 mins to run so below takes &lt;20 mins
+npatterns &lt;- c(3,5,7,10,12,15,18,25) 
+cogaps_nPatterns &lt;- list()
+for (i in npatterns){
+  params &lt;- setParam(params, &quot;nPatterns&quot;, i) #change the number of patterns/LVs
+  cogaps_nPatterns[i] &lt;- CoGAPS(as.matrix(counts_nn_filt),
+                                params, nIterations = 1000)
+}</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            3 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            5 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            7 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            10 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            12 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            15 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            18 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt) (16847 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            25 
+nIterations          1000 
+seed                 694 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt), params, :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<ul>
+<li>Plotting heatmaps starting with lowest <code>nPatterns = 3</code></li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[3]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-5-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><code>nPatterns = 5</code></li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[5]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-6-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><code>nPatterns = 10</code> (almost perfect separation of hypoxia vs. normoxia)</li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[10]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-7-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><code>nPatterns = 12</code></li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[12]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-8-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><code>nPatterns = 15</code> (getting messy)</li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[15]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-9-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><code>nPatterns = 18</code> (back to age being the main variation detected..)</li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[18]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-10-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li><code>nPatterns = 25</code> (not really interpretable at this point..)</li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns[[25]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-11-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="ire-genes" class="section level2">
+<h2>4. IRE Genes</h2>
+<ul>
+<li><p>In the CoGAPS vignette, the example uses only ~1300 genes to perform the CoGAPs algorithm on. At the moment we are performing it on ~16,000 genes.</p></li>
+<li><p>Wanted to test whether pre-filtering / only including subset of genes might help to refine and get better results.</p></li>
+<li><p>The IRE gene set we defined in our previous work contains quite a large number of genes (especially in the 3’ IRE set ~1200 genes). Could try and see if there are particular subsets that are active in the different conditions (e.g. age, hypoxia, etc.).</p></li>
+<li><p>First load in the IRE gene sets determined for zebrafish:</p></li>
+</ul>
+<pre class="r"><code>ireGenes &lt;- readRDS(here(&quot;data&quot;, &quot;genesets&quot;, &quot;zebrafish&quot;, &quot;ireGenes.rds&quot;))</code></pre>
+<ul>
+<li><p>First we will try just using the <strong>All 3’ IREs</strong> set, which contains 0 genes and is the largest gene set of the IRE gene sets (<strong>All 3’ IREs</strong>, <strong>All 5’ IREs</strong>, <strong>HQ 3’ IREs</strong>, <strong>HQ 5’ IREs</strong>),</p></li>
+<li><p>Because this is a smaller number of genes, would expect that the number of LVs is also on the smaller side as well. We will try a quick sweep of values to see if there’s anything interesting.</p></li>
+</ul>
+<pre class="r"><code>counts_nn_filt_3ires &lt;- counts_nn_filt %&gt;%
+  as.data.frame %&gt;%
+  rownames_to_column(&quot;ensembl_gene_id&quot;) %&gt;%
+  dplyr::filter(ensembl_gene_id %in% ireGenes$ire3_all) %&gt;%
+  column_to_rownames(&quot;ensembl_gene_id&quot;) %&gt;%
+  as.matrix()
+#counts_nn_filt_3ires &lt;- counts_nn_filt_3ires[, c(1:4, 9:12)]
+
+rm(params)
+params &lt;- new(&quot;CogapsParams&quot;)
+npatterns &lt;- c(3,5,7,10) 
+cogaps_nPatterns_3ires &lt;- list()
+for (i in npatterns){
+  params &lt;- setParam(params, &quot;nPatterns&quot;, i) #change the number of patterns/LVs
+  cogaps_nPatterns_3ires[i] &lt;- CoGAPS(as.matrix(counts_nn_filt_3ires),
+                                params, nIterations = 1000)
+}</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_3ires) (1050 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            3 
+nIterations          1000 
+seed                 740 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_3ires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_3ires) (1050 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            5 
+nIterations          1000 
+seed                 740 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_3ires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_3ires) (1050 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            7 
+nIterations          1000 
+seed                 740 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_3ires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_3ires) (1050 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            10 
+nIterations          1000 
+seed                 740 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_3ires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<ul>
+<li>Although some of the LVs distinguish between age groups and hypoxia/normoxia none can capture the variation between mutant and wild type genotypes at all. This would suggest that the difference between mutant and wild type gene expression is quite subtle and difficult to retain through dimension reduction.</li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns_3ires[[3]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-14-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_3ires[[5]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-14-2.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_3ires[[7]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-14-3.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#cogaps_nPatterns_3ires[[10]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<ul>
+<li>Testing all of the IRE genes (3 and 5’ together)</li>
+</ul>
+<pre class="r"><code>counts_nn_filt_allires &lt;- counts_nn_filt %&gt;%
+  as.data.frame %&gt;%
+  rownames_to_column(&quot;ensembl_gene_id&quot;) %&gt;%
+  dplyr::filter(ensembl_gene_id %in% ireGenes$ire3_all |
+                  ensembl_gene_id %in% ireGenes$ire5_all) %&gt;%
+  column_to_rownames(&quot;ensembl_gene_id&quot;) %&gt;%
+  as.matrix()
+
+rm(params)
+params &lt;- new(&quot;CogapsParams&quot;)
+npatterns &lt;- c(3,5,7,10) 
+cogaps_nPatterns_allires &lt;- list()
+for (i in npatterns){
+  params &lt;- setParam(params, &quot;nPatterns&quot;, i) #change the number of patterns/LVs
+  cogaps_nPatterns_allires[i] &lt;- CoGAPS(as.matrix(counts_nn_filt_allires),
+                                params, nIterations = 10000)
+}</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            3 
+nIterations          10000 
+seed                 88 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            5 
+nIterations          10000 
+seed                 88 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            7 
+nIterations          10000 
+seed                 88 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 32 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            10 
+nIterations          10000 
+seed                 88 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<ul>
+<li>The LVs don’t look super convincing here either… although they can clearly separate out age probably as the gene expression effects of aging are just so prominent compared to the hypoxia/normoxia and mutation.</li>
+</ul>
+<pre class="r"><code>cogaps_nPatterns_allires[[3]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-16-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_allires[[5]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-16-2.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_allires[[7]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-16-3.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_allires[[10]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-16-4.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li>Does it make a difference limiting the samples (subset to only 6 month old)</li>
+</ul>
+<pre class="r"><code>counts_nn_filt_allires &lt;- counts_nn_filt_allires[, c(1:4, 9:12)]
+
+rm(params)
+params &lt;- new(&quot;CogapsParams&quot;)
+npatterns &lt;- c(3,5,7) 
+cogaps_nPatterns_allires &lt;- list()
+for (i in npatterns){
+  params &lt;- setParam(params, &quot;nPatterns&quot;, i) #change the number of patterns/LVs
+  cogaps_nPatterns_allires[i] &lt;- CoGAPS(as.matrix(counts_nn_filt_allires),
+                                params, nIterations = 10000)
+}</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 8 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            3 
+nIterations          10000 
+seed                 847 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 8 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            5 
+nIterations          10000 
+seed                 847 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre><code>
+This is CoGAPS version 3.6.0 
+Running Standard CoGAPS on as.matrix(counts_nn_filt_allires) (1343 genes and 8 samples) with parameters:
+
+-- Standard Parameters --
+nPatterns            7 
+nIterations          10000 
+seed                 847 
+sparseOptimization   FALSE 
+
+-- Sparsity Parameters --
+alpha          0.01 
+maxGibbsMass   100 </code></pre>
+<pre><code>Warning in `[&lt;-`(`*tmp*`, i, value = CoGAPS(as.matrix(counts_nn_filt_allires), :
+implicit list embedding of S4 objects is deprecated</code></pre>
+<pre class="r"><code>cogaps_nPatterns_allires[[3]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-17-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_allires[[5]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-17-2.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cogaps_nPatterns_allires[[7]]@sampleFactors %&gt;% t %&gt;% pheatmap(cluster_cols = FALSE)</code></pre>
+<p><img src="figure/projectr-test.Rmd/unnamed-chunk-17-3.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li>While there almost seems to be something in the LVs separating mutants and WT with <code>nPatterns = 3</code>, there is one clear sample which doesn’t follow the same pattern and overall it just doesn’t look very convincing.</li>
+</ul>
+</div>
+<div id="next-steps" class="section level2">
+<h2>Next Steps</h2>
+<ul>
+<li><p>For this particular dataset, CoGAPs performed better than MultiPLIER.</p></li>
+<li><p>The CoGAPS approach was easily able to pick out LVs that corresponded to age and even hypoxia. However, no LVs clearly corresponded to genotype, indicating that the Q96_K97del/+ mutation’s effects on gene expression are subtle and that the current matrix factorisation approach doesn’t seem to be sensitive enough to capture this pattern.</p></li>
+<li><p>Because both CoGAPS and MultiPLIER had trouble picking up the differences between mutant and WT, their utility in our analysis is limited as it is these subtle effects we are really interested in. Will likely leave these behind for now and look for alternate approaches.</p></li>
+<li><p>Potentially there are some subsets in the IRE genes which behave differently in the different conditions. CoGAPs generally found that there are two main groupings - IRE genes which are increased in expression with age and ones which are decreased in expression with age. The expression varied with age only and not hypoxia/normoxia or mutation. This is also not super useful.</p></li>
+</ul>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.6.3 (2020-02-29)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS Mojave 10.14.6
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRblas.0.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_AU.UTF-8/en_AU.UTF-8/en_AU.UTF-8/C/en_AU.UTF-8/en_AU.UTF-8
+
+attached base packages:
+[1] parallel  stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+ [1] magrittr_1.5        sva_3.34.0          BiocParallel_1.20.1
+ [4] genefilter_1.68.0   mgcv_1.8-31         nlme_3.1-147       
+ [7] pheatmap_1.0.12     edgeR_3.28.1        limma_3.42.2       
+[10] dplyr_0.8.5         ggplot2_3.3.0       tibble_3.0.1       
+[13] here_0.1            projectR_1.2.0      Biobase_2.46.0     
+[16] BiocGenerics_0.32.0 CoGAPS_3.6.0       
+
+loaded via a namespace (and not attached):
+ [1] bitops_1.0-6                matrixStats_0.56.0         
+ [3] fs_1.4.1                    bit64_0.9-7                
+ [5] doParallel_1.0.15           RColorBrewer_1.1-2         
+ [7] rprojroot_1.3-2             GenomeInfoDb_1.22.1        
+ [9] tools_3.6.3                 backports_1.1.7            
+[11] R6_2.4.1                    KernSmooth_2.23-17         
+[13] DBI_1.1.0                   colorspace_1.4-1           
+[15] withr_2.2.0                 tidyselect_1.1.0           
+[17] bit_1.1-15.2                compiler_3.6.3             
+[19] git2r_0.27.1                DelayedArray_0.12.3        
+[21] pkgmaker_0.31.1             caTools_1.18.0             
+[23] scales_1.1.1                NMF_0.22.0                 
+[25] stringr_1.4.0               digest_0.6.25              
+[27] rmarkdown_2.1               XVector_0.26.0             
+[29] pkgconfig_2.0.3             htmltools_0.4.0            
+[31] bibtex_0.4.2.2              rlang_0.4.6                
+[33] RSQLite_2.2.0               gtools_3.8.2               
+[35] RCurl_1.98-1.2              GenomeInfoDbData_1.2.2     
+[37] Matrix_1.2-18               Rcpp_1.0.4                 
+[39] munsell_0.5.0               S4Vectors_0.24.4           
+[41] Rhdf5lib_1.8.0              lifecycle_0.2.0            
+[43] stringi_1.4.6               whisker_0.4                
+[45] yaml_2.2.1                  SummarizedExperiment_1.16.1
+[47] zlibbioc_1.32.0             rhdf5_2.30.1               
+[49] gplots_3.0.3                plyr_1.8.6                 
+[51] blob_1.2.1                  grid_3.6.3                 
+[53] gdata_2.18.0                promises_1.1.0             
+[55] crayon_1.3.4                lattice_0.20-41            
+[57] splines_3.6.3               annotate_1.64.0            
+[59] locfit_1.5-9.4              knitr_1.28                 
+[61] pillar_1.4.4                GenomicRanges_1.38.0       
+[63] rngtools_1.5                reshape2_1.4.4             
+[65] codetools_0.2-16            stats4_3.6.3               
+[67] XML_3.99-0.3                glue_1.4.1                 
+[69] evaluate_0.14               vctrs_0.3.0                
+[71] httpuv_1.5.2                foreach_1.5.0              
+[73] gtable_0.3.0                purrr_0.3.4                
+[75] assertthat_0.2.1            xfun_0.13                  
+[77] gridBase_0.4-7              xtable_1.8-4               
+[79] later_1.0.0                 survival_3.1-12            
+[81] SingleCellExperiment_1.8.0  iterators_1.0.12           
+[83] memoise_1.1.0               AnnotationDbi_1.48.0       
+[85] registry_0.5-1              IRanges_2.20.2             
+[87] workflowr_1.6.2             cluster_2.1.0              
+[89] ellipsis_0.3.1              ROCR_1.0-11                </code></pre>
+</div>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+http://docs.mathjax.org/en/latest/configuration.html.  This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
