@@ -14,6 +14,8 @@ library(here)
 library(tibble)
 library(ggplot2)
 library(dplyr)
+library(edgeR)
+library(pheatmap)
 library(sva)
 library(magrittr)
 theme_set(theme_bw())
@@ -258,7 +260,7 @@ counts_nn_filt_allires <- counts_nn_filt_allires[, c(1:4, 9:12)]
 
 rm(params)
 params <- new("CogapsParams")
-npatterns <- c(3,5,7,10) 
+npatterns <- c(3,5,7) 
 cogaps_nPatterns_allires <- list()
 for (i in npatterns){
   params <- setParam(params, "nPatterns", i) #change the number of patterns/LVs
@@ -269,7 +271,7 @@ for (i in npatterns){
 cogaps_nPatterns_allires[[3]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
 cogaps_nPatterns_allires[[5]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
 cogaps_nPatterns_allires[[7]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
-cogaps_nPatterns_allires[[10]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+
 ```
 
 - While there almost seems to be something in the LVs separating mutants and WT 
