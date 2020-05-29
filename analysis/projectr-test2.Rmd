@@ -1,0 +1,183 @@
+---
+title: "Testing ProjectR on Zebrafish Dataset - Part 2"
+author: "Nhi Hin"
+date: "2020-05-27"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+library(CoGAPS)
+library(projectR)
+library(here)
+library(tibble)
+library(ggplot2)
+library(dplyr)
+library(genefilter)
+library(edgeR)
+library(pheatmap)
+library(sva)
+library(magrittr)
+theme_set(theme_bw())
+```
+
+
+## Introduction
+
+Due to the lack of results in our initial test of **CoGAPS** and 
+**ProjectR**, the following modifications will be attempted:
+
+- Using the *voom* matrix weight-adjusted counts. We noticed that 
+two of the samples had much higher expression than other ones, and 
+possibly that normalisation hadn't really corrected for that. 
+The voom matrix has been adjusted with quality-weights, so that 
+should help. 
+
+- Filtering out genes with low variance as these are unlikely to 
+contribute anyway. 
+
+## 1. Import data
+
+```{r}
+dge_zeb <- readRDS(here("data", "datasets", "zebrafish", "dge.rds"))
+dge_zeb
+
+counts_nn <- dge_zeb %>% cpm(log=TRUE) 
+
+# Are there values which are < 0?
+sum(counts_nn < 0)
+
+# majority of values are > 0
+sum(counts_nn > 0)
+
+# Filter out the rows containing negative values as these are likely 
+# to be low expressed anyway, and the matrix factorisation used in 
+# Cogaps will not accept them.
+keepTheseGenes <- !rowSums(counts_nn < 0)
+dge_zeb_f <- dge_zeb[keepTheseGenes,,keep.lib.sizes = FALSE] # 16,847 genes left
+
+```
+
+- Apply more aggressive filtering
+
+```{r}
+geneVars <- rowVars(cpm(dge_zeb_f, log=TRUE))
+
+summary(geneVars)
+
+# Filter out genes with variance below median variance 
+keepTheseGenes2 <- rowVars(cpm(dge_zeb_f, log=TRUE)) > summary(geneVars)[[3]]
+
+dge_zeb_f <- dge_zeb_f[keepTheseGenes2,,keep.lib.sizes = FALSE] 
+```
+
+- Import voom object
+
+```{r}
+voomData <- readRDS(here("data", "datasets", "zebrafish", "voomData.rds"))
+
+voomExpression <- voomData$E%>%
+  as.data.frame() %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  dplyr::filter(ensembl_gene_id %in% rownames(dge_zeb_f$counts)) %>%
+  column_to_rownames("ensembl_gene_id")
+
+# get rid of negative values
+keepTheseGenes <- !rowSums(voomExpression < 0)
+voomExpression <- voomExpression[!rowSums(voomExpression < 0),]
+```
+
+## 2. Running CoGAPS
+
+- Run CoGAPS with default settings 
+
+```{r}
+cogaps_def <- CoGAPS(as.matrix(voomExpression), nIterations = 1000)
+```
+
+- Quick heatmap to view the patterns (latent variables) found by CoGAPs. 
+(Default number of patterns = 7)
+
+```{r}
+cogaps_def@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- Results here are already better and appear more interpretable than our 
+initial test.
+
+    - **Pattern 2** shows the outlier samples
+    
+    - **Pattern 7** captures aging (difference between 6 and 24 months)
+    
+    - **Pattern 1** captures difference between normoxia and hypoxia. 
+    It seems that the 6 month mutants respond to hypoxia in a different 
+    way to the 6 month WTs. 
+    
+    - **Pattern 4, 3, 5** aren't as easily interpretable, and there is some 
+    noise. 
+  
+
+## 3. Varying the number of latent variables
+
+- The default number of LVs is 7, but below we will try various numbers of LVs 
+to see if it is possible to find one which accurately describes the entire 
+experimental design including differences between mutant and wild types. 
+
+```{r}
+params <- new("CogapsParams")
+params # defaultparameters
+
+# Quick sweep to see how many patterns / LVs is ideal
+# Each run takes 2-3 mins to run so below takes <20 mins
+npatterns <- c(3,5,7,10,12,15,18,25) 
+cogaps_nPatterns <- list()
+for (i in npatterns){
+  params <- setParam(params, "nPatterns", i) #change the number of patterns/LVs
+  cogaps_nPatterns[i] <- CoGAPS(as.matrix(voomExpression),
+                                params, nIterations = 1000)
+}
+```
+
+- Plotting heatmaps starting with lowest `nPatterns = 3`
+
+```{r}
+cogaps_nPatterns[[3]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 5`
+
+```{r}
+cogaps_nPatterns[[5]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 10` 
+
+```{r}
+cogaps_nPatterns[[10]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 12`
+
+```{r}
+cogaps_nPatterns[[12]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 15`
+
+```{r}
+cogaps_nPatterns[[15]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 18`
+
+```{r}
+cogaps_nPatterns[[18]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
+- `nPatterns = 25`
+
+```{r}
+cogaps_nPatterns[[25]]@sampleFactors %>% t %>% pheatmap(cluster_cols = FALSE)
+```
+
