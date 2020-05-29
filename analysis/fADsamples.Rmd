@@ -1,0 +1,318 @@
+---
+title: "Process fAD patient microarray dataset"
+author: "Nhi Hin"
+date: "2020-05-27"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+library(oligo)
+library(GEOquery)
+library(hugene11sttranscriptcluster.db)
+
+write_fit <- function(fit, results=NULL, F.adjust="none", adjust="fdr", method="global", ...) {
+    if (!is(fit, "MArrayLM")) 
+        stop("fit should be an MArrayLM object")
+    if (!is.null(results) && !is(results, "TestResults")) 
+        stop("results should be a TestResults object")
+    if (is.null(fit$t) || is.null(fit$p.value)) 
+        fit <- eBayes(fit)
+    method <- match.arg(method, c("separate", "global"))
+    p.value <- as.matrix(fit$p.value)
+    if (adjust == "none") {
+        p.value.adj <- NULL
+    }
+    else {
+        p.value.adj <- p.value
+        if (method == "separate") 
+            for (j in 1:ncol(p.value)) p.value.adj[, j] <- p.adjust(p.value[, 
+                j], method = adjust)
+        if (method == "global") 
+            p.value.adj[] <- p.adjust(p.value, method = adjust)
+    }
+    if (F.adjust == "none" || is.null(fit$F.p.value)) 
+        F.p.value.adj <- NULL
+    else F.p.value.adj <- p.adjust(fit$F.p.value, method = F.adjust)
+    
+    tab <- list()
+    tab$A <- (fit$Amean)
+    tab$Coef <- (fit$coef)
+    tab$t <- (fit$t)
+    tab$p.value <- (p.value)
+    tab$p.value.adj <- (p.value.adj)
+    tab$F <- (fit$F)
+    tab$F.p.value <- (fit$F.p.value)
+    tab$F.p.value.adj <- F.p.value.adj
+    tab$Res <- unclass(results)
+    tab$Genes <- fit$genes
+    tab <- data.frame(tab, check.names = FALSE)
+    return(tab)
+}
+```
+
+
+## Introduction 
+
+- This is the only study which performed gene expression profiling on patients with 
+familial Alzheimer's disease. It's a microarray study. 
+
+## 1. Pre-processing
+
+### 1.1. Import raw data
+
+- The raw intensities were downloaded from 
+[GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE39420). 
+
+```{r}
+rawData <- list.files(here("data", "datasets", 
+                           "fad","GSE39420_RAW"), full.names = TRUE)
+intensities <- read.celfiles(rawData)
+```
+
+### 1.2. Normalisation
+
+- Raw probe intensities were converted into gene expression and 
+RMA-normalised.
+
+```{r}
+eset <- rma(intensities)
+```
+
+- Get the expression matrix
+
+```{r}
+exprs <- eset@assayData$exprs
+```
+
+### 1.3. Sample information
+
+- Retrieve sample table from GEO
+
+```{r}
+geo <- getGEO("GSE39420", GSEMatrix = TRUE)
+samples <- geo$GSE39420_series_matrix.txt.gz%>% 
+  phenoData() %>% 
+  pData %>%
+  as.data.frame %>%
+  dplyr::select(title,
+                geo_accession,
+                characteristics_ch1,
+                `age at death:ch1`,
+                `apoe genotype:ch1`,
+                `neuropathological data (braak stage):ch1`,
+                `psen1 mutation:ch1`) %>%
+  dplyr::rename(
+    sex = characteristics_ch1,
+    age = `age at death:ch1`,
+    apoe = `apoe genotype:ch1`,
+    braak = `neuropathological data (braak stage):ch1`,
+    psen = `psen1 mutation:ch1`
+  )
+```
+
+
+```{r}
+samples %<>% 
+  dplyr::mutate(
+    sex = gsub(x = sex, pattern = "gender: ", replacement = ""),
+    apoe = gsub(x = apoe, pattern = "/", replacement = "_"),
+    rep = c(1:7, 1:7, 1:7),
+    group = c(rep("control", 7), rep("eoAD", 7), rep("eoAD_psen1",7)),
+    hasPsenMutation = (psen != "None")
+  )
+
+samples
+```
+
+
+### 1.4. Probe-gene annotation
+
+- The platform used was `[HuGene-1_1-st] Affymetrix Human Gene 1.1 ST 
+Array [transcript (gene) version]`. This corresponds to the keys in the 
+*hugene11sttranscriptcluster.db* package. 
+
+```{r}
+# Check that the probe IDs are in the annotation package 
+rownames(exprs) %in% keys(hugene11sttranscriptcluster.db) %>% summary  # all TRUE
+
+# Retrieve gene id annotations
+annot <- AnnotationDbi::select(
+  x = hugene11sttranscriptcluster.db, 
+  keys = rownames(exprs),
+  columns = c("PROBEID", "ENSEMBL", "ENTREZID", "SYMBOL"),
+  keytype = "PROBEID"
+)
+all(rownames(exprs) %in% annot$PROBEID)  # TRUE
+
+# analysis integrating other species' data  will be based on ensembl gene ids, 
+# so remove probes which do not map to ensembl gene ids. 
+annot %<>% dplyr::filter(!is.na(ENSEMBL)) 
+```
+```{r include=FALSE}
+# old
+# genes <- as.data.frame(hugene11sttranscriptclusterALIAS2PROBE) %>%
+#   full_join(as.data.frame(hugene11sttranscriptclusterENSEMBL)) %>%
+#   full_join(as.data.frame(hugene11sttranscriptclusterGENENAME)) %>%
+#   full_join(as.data.frame(hugene11sttranscriptclusterENTREZID)) %>%
+#   dplyr::filter(probe_id %in% rownames(exprs)) %>%
+#   dplyr::distinct()
+# sum(rownames(exprs) %in% genes$probe_id)  
+```
+
+### 1.5. Duplicated probe ids
+
+- Due to `'select()' returned 1:many mapping between keys and columns`, 
+there are cases where multiple genes correspond to the same probes. 
+
+- We will perform DE gene analysis at the probeset level, so we would need to 
+collapse down some of the rows of `annot` with the same probe id.
+
+```{r}
+# Check for duplicate probe ids (assigned to different genes)
+dup.ids <- annot$PROBEID[duplicated(annot$PROBEID)] %>% 
+  unique %>%
+  sort
+length(dup.ids)  # 3466
+
+# Example probe
+annot[annot$PROBEID == dup.ids[2], ]
+```
+
+-Collapse down the duplicated genes so each row is a unique probe ID.
+
+```{r}
+collapser <- function(x){
+  x %>% unique %>% sort %>% paste(collapse = "|")
+}
+annot <- annot %>% 
+  group_by(PROBEID) %>%
+  summarise_each(funs(collapser)) %>% 
+  ungroup
+```
+
+- We also would want to restrict the expression data to these probes
+and get the ordering to match.
+
+```{r}
+exprs <- exprs %>% as.data.frame %>%
+  rownames_to_column("PROBEID") %>% 
+  dplyr::filter(PROBEID %in% annot$PROBEID) %>%
+  column_to_rownames("PROBEID") %>%
+  magrittr::extract(annot$PROBEID, )
+
+# Check the ordering of rownames is exactly the same
+(rownames(exprs)==annot$PROBEID) %>% summary  # all TRUE
+```
+
+- Tidy the column names of the `exprs` matrix so that the geo accessions 
+correspond to those in the `samples`. 
+
+```{r}
+colnames(exprs) <- gsub(x = colnames(exprs), 
+                        pattern = "_.*$",
+                        replacement = "")
+head(exprs)
+```
+
+
+## 2. Limma analysis
+
+- Because this is microarray data, we won't need to normalise the expression 
+in the same way as for RNA-seq counts and we can just go ahead with log2 
+transformation. 
+
+```{r}
+design <- model.matrix(~0 + group, data = samples) %>%
+  set_colnames(gsub(x = colnames(.), pattern = "group", replacement = ""))
+
+contrasts <- makeContrasts(
+  levels = colnames(design), 
+  eoADvsControl = eoAD - control,
+  psenvsControl = eoAD_psen1 - control,
+  psenvseoAD = eoAD_psen1 - eoAD
+)
+
+fit <- lmFit(log2(exprs), design) %>%
+  contrasts.fit(contrasts)%>%
+  eBayes()
+
+hist(fit$Amean) # Many genes have low expression
+
+results <- decideTests(fit, 
+                       p.value = 0.05, 
+                       adjust.method = "fdr")
+
+results %>% summary()
+
+results %>% vennCounts()
+
+res <- write_fit(fit, results, adjust = "fdr", method = "global") %>%
+  rownames_to_column("PROBEID") %>%
+  dplyr::left_join(annot)%>%
+  dplyr::filter(ENSEMBL != "")
+```
+
+**Results**
+
+- There is very little to no difference between early-onset AD and 
+early-onset AD as caused by confirmed *PSEN1* mutations with 1,248 
+DE genes in common between the `eoADvsControl` and `psenvsControl` 
+comparisons as well as the `psenvseoAD` comparison. 
+
+
+## 3. Gene set testing
+
+- We will perform gene set testing using *fry*, *camera* and *fgsea* and 
+combine the raw p-values using Wilkinson's method (r=1). 
+
+```{r}
+source(here("code", "combinedGSEA_ma.R"))
+```
+
+```{r}
+hallmarkGenes <- readRDS(here("data", "datasets", "fad", "genesets",
+                              "ens_h_mapped.rds"))
+
+hallmarkIdx <- limma::ids2indices(hallmarkGenes, 
+                                  identifiers = rownames(exprs))
+
+hEnr <- combinedGSEA_ma(log2(exprs), fit = fit, design = design,
+                        contrasts = contrasts, idx = hallmarkIdx)
+```
+
+
+
+
+
+## Export Objects
+
+- Expression, sample, and gene data
+
+```{r}
+procData <- list(
+  exprs = exprs,
+  genes = annot,
+  samples = samples
+)
+
+procData %>% saveRDS(here("data", "datasets", "fad", "procData.rds"))
+```
+
+- DE analysis objects
+
+```{r}
+res %>% saveRDS(here("data", "datasets", "fad", "res.rds"))
+design %>% saveRDS(here("data", "datasets", "fad", "design.rds"))
+contrasts %>% saveRDS(here("data", "datasets", "fad", "contrasts.rds"))
+fit %>% saveRDS(here("data", "datasets", "fad", "fit.rds"))
+results %>% saveRDS(here("data", "datasets", "fad", "results.rds"))
+```
+
+- Enrichment analysis results
+
+```{r}
+hEnr %>% saveRDS(here("data", "datasets", "fad", "hEnr.rds"))
+```
+
