@@ -1,0 +1,275 @@
+---
+title: "testing-pathwayPCA"
+author: "Nhi Hin"
+date: "2020-05-29"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+library(pathwayPCA)
+library(here)
+library(dplyr)
+library(magrittr)
+library(tibble)
+library(readr)
+library(ggplot2)
+theme_set(theme_bw())
+```
+
+
+## Introduction
+
+- *PathwayPCA* is enrichment analysis utilising advanced PCA techniques such 
+as supervised PCA and AES (adaptive elastic-net sparse) PCA. While giving 
+similar results to normal gene set testing, its advantage is that it is also 
+able to work on a per-sample basis to see whether certain gene sets are 
+more enriched in some samples etc. This is particularly important when 
+considering diseases/conditions like Alzheimer's Disease where symptoms and 
+etiologies are heterogeneous. 
+
+- Aim here is to apply *PathwayPCA* to familial and sporadic AD human 
+datasets to see if the enriched pathways of any subsets end up being 
+similar to  the fAD-like zebrafish (or potentially the 5xFAD mouse model). 
+
+## fAD microarray dataset 
+
+### 1. Import gene sets
+
+- According to the [PathwayPCA vignette](https://gabrielodom.github.io/pathwayPCA/articles/Supplement2-Importing_Data.html#overview) we need to set up a `pathwayCollection` object of the gene 
+sets to be tested. Here I will use the Hallmark collection from MSigDB. 
+
+- The `ens_h_mapped.rds` object was previously created from the Hallmark 
+collection .gmt file from MSigDB (v.7.0). The entrezgene IDs were converted 
+to `[HuGene-1_1-st] Affymetrix Human Gene 1.1 ST 
+Array [transcript (gene) version]` probeset IDs as the DE analysis for 
+this particular dataset was done at the probeset level (many probes 
+corresponded to multiple genes). 
+
+```{r}
+hallmarkGenes <- readRDS(here("data", "datasets", "fad", "genesets",
+                              "ens_h_mapped.rds"))
+hallmarkNames <- names(hallmarkGenes)
+
+hallmarkCol <- CreatePathwayCollection(
+  sets_ls = hallmarkGenes,
+  TERMS = hallmarkNames
+)
+```
+
+### 2. Tidy sample/expression matrix
+
+- The expression data must be in tidy format for inputting into 
+*PathwayPCA*. 
+
+```{r}
+exprs <- readRDS(here("data", "datasets", "fad", "procData.rds"))$exprs
+samples <- readRDS(here("data", "datasets", "fad", "procData.rds"))$samples
+samples %<>% set_rownames(.$geo_accession) %>% rownames_to_column("Sample")
+samples %<>% mutate(hasAD = c(rep(FALSE, 7), rep(TRUE, 14)))
+
+tidyDat <- exprs %>% log2 %>%
+  rownames_to_column("gene") %>% 
+  #mutate(gene = gsub(x = gene, pattern = "(^.*$)", replacement = "Gene\\1")) %>%
+  TransposeAssay()
+
+
+# tidyDat$Sample == samples$Sample  # Check ordering is OK
+# 
+# tidyDat <- inner_join(samples, tidyDat, by ="Sample")
+
+tidyDat[1:5, 1:20]  # preview
+```
+
+### 3. `Omics` data object
+
+- The samples/expression tidy data and gene sets must now be placed inside an 
+`Omics` object.
+
+- We have to create different `Omics` objects to test different contrasts. 
+*PathwayPCA* does not support complex designs like regular gene set testing 
+methods utilising *limma* objects. However, they do support the following 
+modes:
+
+    - Regression on a continuous variable (e.g. age)
+    - Categorical (only binary supported) (e.g. `hasPSEN` mutation)
+    - Survival (not relevant to our analysis). 
+
+- Because of this *PathwayPCA* should be able to give us some complementary 
+information/results. 
+
+### 4. AES-PCA
+
+**Age of death**
+
+- No pathways are significantly associated with age of death however this 
+doesn't take into account whether they have AD or not.
+
+```{r}
+# To create a regression omics object, need a dataframe with 
+# Sample and response as column names
+# Here the age of death in years is the response
+samples_reg <- samples %>% 
+  dplyr::select(Sample, age) %>%
+  dplyr::rename(response = age)
+
+# Create omics object
+omicsDatReg <- CreateOmics(
+  assayData_df = tidyDat, 
+  pathwayCollection_ls = hallmarkCol,
+  response = samples_reg,
+  respType = "reg"
+)
+
+# Perform enrichment testing
+testReg <- AESPCA_pVals(
+  object = omicsDatReg,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
+
+# Results
+testReg$pVals_df
+```
+
+**Has AD**
+
+- Here we test whether pathways are enriched on the binary variable `hasAD` 
+using AES-PCA
+
+```{r}
+samples_AD <- samples %>%
+  dplyr::select(Sample, hasAD) %>%
+  dplyr::rename(response = hasAD)
+
+omics_AD <- CreateOmics(
+  assayData_df = tidyDat,
+  pathwayCollection_ls = hallmarkCol,
+  response = samples_AD,
+  respType = "categ"
+)
+
+# Perform enrichment testing using AES-PCA
+test_AD <- AESPCA_pVals(
+  object = omics_AD,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
+
+test_AD$pVals_df 
+
+sigSets <- test_AD$pVals_df %>%
+  dplyr::filter(FWER_Holm < 0.05)
+
+sigSets
+
+# Perform enrichment testing using Supervised PCA
+# test_AD2 <- SuperPCA_pVals(
+#   object = omics_AD,
+#   numPCs = 2,
+#   parallel = TRUE,
+#   numCores = 2,
+#   adjustpValues = TRUE,
+#   adjustment = c("SidakSS", "BY")
+# )
+# test_AD2$pVals_df
+```
+
+### 5. Plots
+
+ - **Reactive oxygen species pathway**: Samples with AD tend to have lower 
+ expression of genes in this pathway compared to samples without AD. 
+
+```{r}
+test_AD$PCs_ls$HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY %>% 
+  set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = hasAD)) + 
+  geom_histogram(bins = 8, colour = "white") +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("#bbbbbb", "orangered")) +
+  ggtitle("Reactive Oxygen Species Pathway")
+```
+
+- All significant gene sets
+
+```{r}
+test_AD$PCs_ls[sigSets$pathways] %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::mutate(pathway = gsub(x = pathway,
+                               pattern = "_",
+                               replacement = " "),
+                pathway = gsub(x = pathway,
+                               pattern = "HALLMARK ",
+                               replacement = "")) %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = hasAD)) + 
+  geom_histogram(bins = 8, colour = "white") +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("#bbbbbb", "orangered")) +
+  facet_wrap(~pathway, scales = "free_y")
+  
+```
+
+```{r}
+test_AD$PCs_ls[sigSets$pathways] %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::mutate(pathway = gsub(x = pathway,
+                               pattern = "_",
+                               replacement = " "),
+                pathway = gsub(x = pathway,
+                               pattern = "HALLMARK ",
+                               replacement = "")) %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = apoe, colour = hasAD)) + 
+  geom_histogram(bins = 8) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("#bbbbbb", "orangered", "turquoise")) +
+  scale_colour_manual(values = c("black", "yellow"))+
+  facet_wrap(~pathway, scales = "free_y")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

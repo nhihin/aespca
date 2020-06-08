@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Nhi Hin" />
+
+<meta name="date" content="2020-06-01" />
+
+<title>PathwayPCA on fAD-like zebrafish</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/master/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 51px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h2 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h3 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h4 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h5 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h6 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #ffffff;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row-fluid">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">mousevsfish</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="about.html">About</a>
+</li>
+<li>
+  <a href="license.html">License</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">PathwayPCA on fAD-like zebrafish</h1>
+<h4 class="author">Nhi Hin</h4>
+<h4 class="date">2020-06-01</h4>
+
+</div>
+
+
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
+<span class="glyphicon glyphicon-list" aria-hidden="true"></span> workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span>
+</button>
+</p>
+<div id="workflowr-report" class="collapse">
+<ul class="nav nav-tabs">
+<li class="active">
+<a data-toggle="tab" href="#summary">Summary</a>
+</li>
+<li>
+<a data-toggle="tab" href="#checks"> Checks <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> </a>
+</li>
+<li>
+<a data-toggle="tab" href="#versions">Past versions</a>
+</li>
+</ul>
+<div class="tab-content">
+<div id="summary" class="tab-pane fade in active">
+<p>
+<strong>Last updated:</strong> 2020-06-02
+</p>
+<p>
+<strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 6 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 1
+</p>
+<p>
+<strong>Knit directory:</strong> <code>mousevsfish/</code> <span class="glyphicon glyphicon-question-sign" aria-hidden="true" title="This is the local directory in which the code in this file was executed."> </span>
+</p>
+<p>
+This reproducible <a href="http://rmarkdown.rstudio.com">R Markdown</a> analysis was created with <a
+  href="https://github.com/jdblischak/workflowr">workflowr</a> (version 1.6.2). The <em>Checks</em> tab describes the reproducibility checks that were applied when the results were created. The <em>Past versions</em> tab lists the development history.
+</p>
+<hr>
+</div>
+<div id="checks" class="tab-pane fade">
+<div id="workflowr-checks" class="panel-group">
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges"> <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted changes </a>
+</p>
+</div>
+<div id="strongRMarkdownfilestronguncommittedchanges" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The R Markdown is untracked by Git. To know which version of the R Markdown file created these results, you’ll want to first commit it to the Git repo. If you’re still working on the analysis, you can ignore this warning. When you’re finished, you can run <code>wflow_publish</code> to commit the R Markdown file and build the HTML.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongEnvironmentstrongempty"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Environment:</strong> empty </a>
+</p>
+</div>
+<div id="strongEnvironmentstrongempty" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! The global environment was empty. Objects defined in the global environment can affect the analysis in your R Markdown file in unknown ways. For reproduciblity it’s best to always run the code in an empty environment.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSeedstrongcodesetseed20200504code"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Seed:</strong> <code>set.seed(20200504)</code> </a>
+</p>
+</div>
+<div id="strongSeedstrongcodesetseed20200504code" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The command <code>set.seed(20200504)</code> was run prior to running the code in the R Markdown file. Setting a seed ensures that any results that rely on randomness, e.g. subsampling or permutations, are reproducible.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSessioninformationstrongrecorded"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Session information:</strong> recorded </a>
+</p>
+</div>
+<div id="strongSessioninformationstrongrecorded" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Recording the operating system, R version, and package versions is critical for reproducibility.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongCachestrongnone"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Cache:</strong> none </a>
+</p>
+</div>
+<div id="strongCachestrongnone" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Nice! There were no cached chunks for this analysis, so you can be confident that you successfully produced the results during this run.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongFilepathsstrongrelative"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>File paths:</strong> relative </a>
+</p>
+</div>
+<div id="strongFilepathsstrongrelative" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Using relative paths to the files within your workflowr project makes it easier to run your code on other machines.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomnhihinmousevsfishtreed0ddd8e656a4db0a787330fc220740545ae52fb2targetblankd0ddd8ea"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/nhihin/mousevsfish/tree/d0ddd8e656a4db0a787330fc220740545ae52fb2" target="_blank">d0ddd8e</a> </a>
+</p>
+</div>
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomnhihinmousevsfishtreed0ddd8e656a4db0a787330fc220740545ae52fb2targetblankd0ddd8ea" class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
+</p>
+<p>
+The results in this page were generated with repository version <a href="https://github.com/nhihin/mousevsfish/tree/d0ddd8e656a4db0a787330fc220740545ae52fb2" target="_blank">d0ddd8e</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+</p>
+<p>
+Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
+</p>
+<pre><code>
+Ignored files:
+    Ignored:    .Rhistory
+    Ignored:    .Rproj.user/
+    Ignored:    data/.DS_Store
+    Ignored:    data/datasets/.DS_Store
+    Ignored:    data/datasets/fad/.DS_Store
+    Ignored:    data/datasets/mouse/.DS_Store
+    Ignored:    data/datasets/mouse/kallisto/.DS_Store
+    Ignored:    data/datasets/zebrafish/.DS_Store
+    Ignored:    data/de/
+    Ignored:    data/genesets/.DS_Store
+    Ignored:    data/multiplier/.DS_Store
+
+Untracked files:
+    Untracked:  analysis/fba-test.Rmd
+    Untracked:  analysis/pathwayPCA-mouse.Rmd
+    Untracked:  analysis/pathwayPCA-mouse2.Rmd
+    Untracked:  analysis/pathwayPCA-zebrafish.Rmd
+    Untracked:  analysis/testing-pathwayPCA.Rmd
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967918_C1.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967919_C2.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967921_C4.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967922_C5.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967923_C6.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967924_C7.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967925_E1.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967926_E2.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967927_E3.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967928_E4.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967929_E5.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967930_E6.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967931_E7.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967932_P1.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967933_P2.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967934_P3.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967935_P4.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967936_P5.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967937_P6.CEL.gz
+    Untracked:  data/datasets/fad/GSE39420_RAW/GSM967938_P7.CEL.gz
+    Untracked:  data/datasets/zebrafish/voomData.rds
+    Untracked:  data/enrichment/
+    Untracked:  data/factor_analysis/
+    Untracked:  data/genesets/zebrafish/ens_h_mapped.rds
+    Untracked:  ~$notes.docx
+
+Unstaged changes:
+    Deleted:    data/datasets/zebrafish/gseaResults_h.rds
+    Deleted:    data/datasets/zebrafish/gseaResults_h2.rds
+
+</code></pre>
+<p>
+Note that any generated files, e.g. HTML, png, CSS, etc., are not included in this status report because it is ok for generated content to have uncommitted changes.
+</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+</div>
+<div id="versions" class="tab-pane fade">
+<p>
+There are no past versions. Publish this analysis with <code>wflow_publish()</code> to start tracking its development.
+</p>
+<hr>
+</div>
+</div>
+</div>
+<pre class="r"><code>library(pathwayPCA)
+library(edgeR)</code></pre>
+<pre><code>Loading required package: limma</code></pre>
+<pre class="r"><code>library(here)</code></pre>
+<pre><code>here() starts at /Users/nhihin/Documents/GitHub/mousevsfish</code></pre>
+<pre class="r"><code>library(ggplot2)
+library(magrittr)
+library(dplyr)</code></pre>
+<pre><code>
+Attaching package: &#39;dplyr&#39;</code></pre>
+<pre><code>The following objects are masked from &#39;package:stats&#39;:
+
+    filter, lag</code></pre>
+<pre><code>The following objects are masked from &#39;package:base&#39;:
+
+    intersect, setdiff, setequal, union</code></pre>
+<pre class="r"><code>library(tibble)</code></pre>
+<div id="import-gene-sets" class="section level3">
+<h3>1. Import gene sets</h3>
+<ul>
+<li><p>According to the <a href="https://gabrielodom.github.io/pathwayPCA/articles/Supplement2-Importing_Data.html#overview">PathwayPCA vignette</a> we need to set up a <code>pathwayCollection</code> object of the gene sets to be tested. Here I will use the Hallmark collection from MSigDB.</p></li>
+<li><p>The <code>ens_h_mapped.rds</code> object was previously created from the Hallmark collection .gmt file from MSigDB (v.7.0). The entrezgene IDs were converted to Ensembl mouse IDs using homologous genes from BioMart.</p></li>
+</ul>
+<pre class="r"><code>hallmarkGenes &lt;- readRDS(here(&quot;data&quot;, &quot;genesets&quot;, &quot;zebrafish&quot;,
+                              &quot;ens_h_mapped.rds&quot;))
+hallmarkNames &lt;- names(hallmarkGenes)
+
+hallmarkCol &lt;- CreatePathwayCollection(
+  sets_ls = hallmarkGenes,
+  TERMS = hallmarkNames
+)</code></pre>
+</div>
+<div id="tidy-sampleexpression-matrix" class="section level3">
+<h3>2. Tidy sample/expression matrix</h3>
+<ul>
+<li>The expression data must be in tidy format for inputting into <em>PathwayPCA</em>.</li>
+</ul>
+<pre class="r"><code>exprs &lt;- readRDS(here(&quot;data&quot;, &quot;datasets&quot;, &quot;zebrafish&quot;, 
+                      &quot;dge.rds&quot;)) %&gt;%
+  cpm(log=TRUE)
+
+samples &lt;- readRDS(here(&quot;data&quot;, &quot;datasets&quot;, &quot;zebrafish&quot;, 
+                        &quot;dge.rds&quot;))$samples
+samples %&lt;&gt;% rownames_to_column(&quot;Sample&quot;)
+
+tidyDat &lt;- exprs %&gt;% 
+  as.data.frame %&gt;%
+  rownames_to_column(&quot;gene&quot;) %&gt;% 
+  TransposeAssay()
+
+tidyDat[1:5, 1:20]  # preview</code></pre>
+<pre><code>    Sample ENSDARG00000000001 ENSDARG00000000002 ENSDARG00000000018
+1 wt_6_0_1           3.522776           2.941302           5.103581
+2 wt_6_0_2           3.477294           2.855987           5.132625
+3 wt_6_0_3           3.749178           3.125795           5.259213
+4 wt_6_0_4           3.428300           3.030478           5.328224
+5 wt_6_1_2           3.621075           2.804824           5.283903
+  ENSDARG00000000019 ENSDARG00000000068 ENSDARG00000000069 ENSDARG00000000086
+1           7.536819           3.661949           4.282534           7.604517
+2           7.391707           3.865656           4.223484           7.636244
+3           7.500113           3.947884           4.386798           7.707228
+4           7.549412           3.793741           4.618566           7.620266
+5           7.380070           4.002429           4.554892           7.555687
+  ENSDARG00000000103 ENSDARG00000000142 ENSDARG00000000151 ENSDARG00000000161
+1           8.028111           4.267680           4.219143           4.499651
+2           8.072533           4.161571           4.218701           4.591342
+3           8.007179           4.266288           4.383316           4.555306
+4           8.073227           4.217816           4.148699           4.551103
+5           7.883705           4.313957           4.622507           4.468521
+  ENSDARG00000000175 ENSDARG00000000183 ENSDARG00000000189 ENSDARG00000000212
+1           1.490274           7.073158           6.792642         -1.3988253
+2           1.274780           7.132282           6.845001         -0.8622975
+3           1.307362           7.028181           6.920032         -1.5533475
+4           1.082473           6.970707           6.737685         -1.5590815
+5           1.162277           6.938041           6.789034         -1.6641095
+  ENSDARG00000000229 ENSDARG00000000241 ENSDARG00000000324 ENSDARG00000000349
+1           4.332866           6.554487           4.765456         -1.6511950
+2           4.432104           6.257070           4.909475         -0.7870406
+3           4.599187           6.357517           4.962758         -0.5219847
+4           4.629718           6.000342           4.819191         -0.5843710
+5           4.506184           6.351315           4.837611         -0.7968172</code></pre>
+</div>
+<div id="omics-data-object" class="section level3">
+<h3>3. <code>Omics</code> data object</h3>
+<ul>
+<li><p>The samples/expression tidy data and gene sets must now be placed inside an <code>Omics</code> object.</p></li>
+<li><p>We have to create different <code>Omics</code> objects to test different contrasts. <em>PathwayPCA</em> does not support complex designs like regular gene set testing methods utilising <em>limma</em> objects. However, they do support the following modes:</p>
+<ul>
+<li>Regression on a continuous variable (e.g. age)</li>
+<li>Categorical (only binary supported) (e.g. <code>hasPSEN</code> mutation)</li>
+<li>Survival (not relevant to our analysis).</li>
+</ul></li>
+<li><p>Because of this <em>PathwayPCA</em> should be able to give us some complementary information/results.</p></li>
+</ul>
+</div>
+<div id="aes-pca" class="section level3">
+<h3>4. AES-PCA</h3>
+<p><strong>Has AD</strong></p>
+<ul>
+<li>Here we test whether pathways are enriched on the binary variable <code>genotype</code> using AES-PCA</li>
+</ul>
+<pre class="r"><code>samples_genotype &lt;- samples %&gt;%
+  dplyr::select(Sample, Genotype) %&gt;%
+  dplyr::rename(response = Genotype)
+
+omics_genotype &lt;- CreateOmics(
+  assayData_df = tidyDat,
+  pathwayCollection_ls = hallmarkCol,
+  response = samples_genotype,
+  respType = &quot;categ&quot;
+)</code></pre>
+<pre><code>7 genes have variance &lt; epsilon and will be removed. These gene(s) are:</code></pre>
+<pre><code>[1] &quot;ENSDARG00000068817&quot; &quot;ENSDARG00000096188&quot; &quot;ENSDARG00000110606&quot;
+[4] &quot;ENSDARG00000111823&quot; &quot;ENSDARG00000113299&quot; &quot;ENSDARG00000114379&quot;
+[7] &quot;ENSDARG00000114532&quot;</code></pre>
+<pre><code>
+  ======  Creating object of class OmicsCateg  =======</code></pre>
+<pre><code>The input pathway database included 5147 unique features.</code></pre>
+<pre><code>The input assay dataset included 25023 features.</code></pre>
+<pre><code>Only pathways with at least 3 or more features included in the assay dataset are
+  tested (specified by minPathSize parameter). There are 50 pathways which meet
+  this criterion.</code></pre>
+<pre><code>Because pathwayPCA is a self-contained test (PMID: 17303618), only features in
+  both assay data and pathway database are considered for analysis. There are 5079
+  such features shared by the input assay and pathway database.</code></pre>
+<pre class="r"><code># Perform enrichment testing using AES-PCA
+test_genotype &lt;- AESPCA_pVals(
+  object = omics_genotype,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c(&quot;Holm&quot;, &quot;BH&quot;)
+)</code></pre>
+<pre><code>Part 1: Calculate Pathway AES-PCs</code></pre>
+<pre><code>Initializing Computing Cluster: DONE
+Extracting Pathway PCs in Parallel: DONE
+
+Part 2: Calculate Pathway p-Values
+Initializing Computing Cluster: DONE
+Extracting Pathway p-Values in Parallel: DONE
+
+Part 3: Adjusting p-Values and Sorting Pathway p-Value Data Frame
+DONE</code></pre>
+<pre class="r"><code>test_genotype$pVals_df </code></pre>
+<pre><code># A tibble: 50 x 6
+   pathways              n_tested terms                   rawp FWER_Holm  FDR_BH
+ * &lt;chr&gt;                    &lt;int&gt; &lt;chr&gt;                  &lt;dbl&gt;     &lt;dbl&gt;   &lt;dbl&gt;
+ 1 HALLMARK_INTERFERON_…      273 HALLMARK_INTERFERO…  1.13e-5  0.000567 5.67e-4
+ 2 HALLMARK_OXIDATIVE_P…      223 HALLMARK_OXIDATIVE…  3.80e-5  0.00186  7.64e-4
+ 3 HALLMARK_FATTY_ACID_…      200 HALLMARK_FATTY_ACI…  4.58e-5  0.00220  7.64e-4
+ 4 HALLMARK_APICAL_SURF…       68 HALLMARK_APICAL_SU…  8.85e-5  0.00416  1.11e-3
+ 5 HALLMARK_NOTCH_SIGNA…       43 HALLMARK_NOTCH_SIG…  1.77e-4  0.00812  1.77e-3
+ 6 HALLMARK_INTERFERON_…      114 HALLMARK_INTERFERO…  1.17e-3  0.0527   9.77e-3
+ 7 HALLMARK_IL6_JAK_STA…      106 HALLMARK_IL6_JAK_S…  5.12e-3  0.225    3.66e-2
+ 8 HALLMARK_BILE_ACID_M…      133 HALLMARK_BILE_ACID…  1.06e-2  0.456    6.63e-2
+ 9 HALLMARK_INFLAMMATOR…      244 HALLMARK_INFLAMMAT…  1.20e-2  0.505    6.68e-2
+10 HALLMARK_UNFOLDED_PR…      150 HALLMARK_UNFOLDED_…  2.14e-2  0.876    1.05e-1
+# … with 40 more rows</code></pre>
+<pre class="r"><code>sigSets &lt;- test_genotype$pVals_df %&gt;%
+  dplyr::filter(FDR_BH &lt; 0.05)
+
+sigSets</code></pre>
+<pre><code># A tibble: 7 x 6
+  pathways              n_tested terms                    rawp FWER_Holm  FDR_BH
+  &lt;chr&gt;                    &lt;int&gt; &lt;chr&gt;                   &lt;dbl&gt;     &lt;dbl&gt;   &lt;dbl&gt;
+1 HALLMARK_INTERFERON_…      273 HALLMARK_INTERFERON…  1.13e-5  0.000567 5.67e-4
+2 HALLMARK_OXIDATIVE_P…      223 HALLMARK_OXIDATIVE_…  3.80e-5  0.00186  7.64e-4
+3 HALLMARK_FATTY_ACID_…      200 HALLMARK_FATTY_ACID…  4.58e-5  0.00220  7.64e-4
+4 HALLMARK_APICAL_SURF…       68 HALLMARK_APICAL_SUR…  8.85e-5  0.00416  1.11e-3
+5 HALLMARK_NOTCH_SIGNA…       43 HALLMARK_NOTCH_SIGN…  1.77e-4  0.00812  1.77e-3
+6 HALLMARK_INTERFERON_…      114 HALLMARK_INTERFERON…  1.17e-3  0.0527   9.77e-3
+7 HALLMARK_IL6_JAK_STA…      106 HALLMARK_IL6_JAK_ST…  5.12e-3  0.225    3.66e-2</code></pre>
+<pre class="r"><code># Perform enrichment testing using Supervised PCA
+# test_AD2 &lt;- SuperPCA_pVals(
+#   object = omics_AD,
+#   numPCs = 2,
+#   parallel = TRUE,
+#   numCores = 2,
+#   adjustpValues = TRUE,
+#   adjustment = c(&quot;SidakSS&quot;, &quot;BY&quot;)
+# )
+# test_AD2$pVals_df</code></pre>
+</div>
+<div id="plots" class="section level3">
+<h3>5. Plots</h3>
+<ul>
+<li><strong>Reactive oxygen species pathway</strong>: Samples with AD tend to have lower expression of genes in this pathway compared to samples without AD.</li>
+</ul>
+<pre class="r"><code>test_genotype$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %&gt;% 
+  set_rownames(attributes(test_genotype$PCs_ls)$sampleIDs) %&gt;%
+  rownames_to_column(&quot;Sample&quot;) %&gt;%
+  left_join(samples, by = &quot;Sample&quot;) %&gt;%
+  dplyr::filter(Hypoxia == 0) %&gt;%
+  ggplot(aes(x = V1, fill = Genotype, colour = Age)) + 
+  geom_histogram(bins = 8) +
+  labs(x = &quot;PC1 value for each sample&quot;,
+       y = &quot;Count&quot;, 
+       fill = &quot;Has AD?&quot;) +
+  scale_fill_manual(values = c(&quot;#bbbbbb&quot;, &quot;orangered&quot;)) +
+  scale_colour_manual(values = c(&quot;black&quot;, &quot;yellow&quot;))+
+  ggtitle(&quot;Oxidative Phosphorylation&quot;)</code></pre>
+<p><img src="figure/pathwayPCA-zebrafish.Rmd/unnamed-chunk-5-1.png" width="672" style="display: block; margin: auto;" /></p>
+<ul>
+<li>All significant gene sets</li>
+</ul>
+<pre class="r"><code>test_genotype$PCs_ls %&gt;% 
+  lapply(function(x){
+    x %&gt;% set_rownames(attributes(test_genotype$PCs_ls)$sampleIDs) %&gt;%
+      rownames_to_column(&quot;Sample&quot;)
+  }) %&gt;%
+  bind_rows(.id = &quot;pathway&quot;) %&gt;%
+  dplyr::mutate(pathway = gsub(x = pathway,
+                               pattern = &quot;_&quot;,
+                               replacement = &quot; &quot;),
+                pathway = gsub(x = pathway,
+                               pattern = &quot;HALLMARK &quot;,
+                               replacement = &quot;&quot;)) %&gt;%
+  left_join(samples, by = &quot;Sample&quot;) %&gt;%
+  dplyr::filter(Hypoxia == 0) %&gt;%
+  ggplot(aes(x = V1, fill = Genotype, colour = Age))+
+  facet_wrap(~pathway, scales = &quot;free_y&quot;)+
+  geom_histogram(bins = 8) +
+  labs(x = &quot;PC1 value for each sample&quot;,
+       y = &quot;Count&quot;, 
+       fill = &quot;Genotype&quot;) +
+  scale_fill_manual(values = c( &quot;orangered&quot;, &quot;#bbbbbb&quot;)) +
+  scale_color_manual(values = c(&quot;black&quot;, &quot;yellow&quot;)) </code></pre>
+<p><img src="figure/pathwayPCA-zebrafish.Rmd/unnamed-chunk-6-1.png" width="672" style="display: block; margin: auto;" /></p>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 3.6.3 (2020-02-29)
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+Running under: macOS Mojave 10.14.6
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRblas.0.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_AU.UTF-8/en_AU.UTF-8/en_AU.UTF-8/C/en_AU.UTF-8/en_AU.UTF-8
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] tibble_3.0.1     dplyr_0.8.5      magrittr_1.5     ggplot2_3.3.0   
+[5] here_0.1         edgeR_3.28.1     limma_3.42.2     pathwayPCA_1.2.0
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_1.0.4       pillar_1.4.4     compiler_3.6.3   later_1.0.0     
+ [5] git2r_0.27.1     workflowr_1.6.2  tools_3.6.3      digest_0.6.25   
+ [9] evaluate_0.14    lifecycle_0.2.0  gtable_0.3.0     lattice_0.20-41 
+[13] pkgconfig_2.0.3  rlang_0.4.6      Matrix_1.2-18    cli_2.0.2       
+[17] yaml_2.2.1       parallel_3.6.3   xfun_0.13        withr_2.2.0     
+[21] stringr_1.4.0    knitr_1.28       vctrs_0.3.0      fs_1.4.1        
+[25] tidyselect_1.1.0 locfit_1.5-9.4   rprojroot_1.3-2  grid_3.6.3      
+[29] glue_1.4.1       R6_2.4.1         fansi_0.4.1      survival_3.1-12 
+[33] rmarkdown_2.1    farver_2.0.3     purrr_0.3.4      ellipsis_0.3.1  
+[37] backports_1.1.7  scales_1.1.1     promises_1.1.0   lars_1.2        
+[41] htmltools_0.4.0  splines_3.6.3    assertthat_0.2.1 colorspace_1.4-1
+[45] httpuv_1.5.2     labeling_0.3     utf8_1.1.4       stringi_1.4.6   
+[49] munsell_0.5.0    crayon_1.3.4    </code></pre>
+</div>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+http://docs.mathjax.org/en/latest/configuration.html.  This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

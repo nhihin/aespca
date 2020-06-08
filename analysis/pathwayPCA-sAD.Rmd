@@ -1,0 +1,576 @@
+---
+title: "PathwayPCA on Mayo Clinic RNA-seq dataset"
+author: "Nhi Hin"
+date: "2020-06-01"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+library(pathwayPCA)
+library(edgeR)
+library(here)
+library(ggplot2)
+library(magrittr)
+library(export)
+library(reshape2)
+library(dplyr)
+library(Rtsne)
+library(tibble)
+library(pheatmap)
+library(cluster)
+theme_set(theme_bw())
+
+save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+```
+
+
+### 1. Import gene sets
+
+- According to the [PathwayPCA vignette](https://gabrielodom.github.io/pathwayPCA/articles/Supplement2-Importing_Data.html#overview) we need to set up a `pathwayCollection` object of the gene 
+sets to be tested. Here I will use the Hallmark collection from MSigDB. 
+
+- The `ens_h_mapped.rds` object was previously created from the Hallmark 
+collection .gmt file from MSigDB (v.7.0). The entrezgene IDs were converted 
+to Ensembl human IDs using homologous genes from BioMart. 
+
+```{r}
+hallmarkGenes <- readRDS(here("data", "genesets", "human",
+                              "ens_h_mapped.rds"))
+hallmarkNames <- names(hallmarkGenes)
+
+hallmarkCol <- CreatePathwayCollection(
+  sets_ls = hallmarkGenes,
+  TERMS = hallmarkNames
+)
+```
+
+### 2. Tidy sample/expression matrix
+
+- The expression data must be in tidy format for inputting into 
+*PathwayPCA*. 
+
+```{r}
+exprs <- readRDS(here("data", "datasets", "mayo", 
+                      "dge.rds")) %>%
+  cpm(log=TRUE)
+
+samples <- readRDS(here("data", "datasets", "mayo", 
+                        "dge.rds"))$samples 
+rownames(samples) <- samples$SampleID
+samples %<>% rownames_to_column("Sample")
+
+tidyDat <- exprs %>% 
+  as.data.frame %>%
+  rownames_to_column("gene") %>% 
+  TransposeAssay()
+
+tidyDat[1:5, 1:20]  # preview
+```
+
+- Subsetting data
+
+```{r}
+# Temporal cortex
+samples_ADcontrols_t <- samples %>%
+  dplyr::filter(Diagnosis %in% c("AD", "Control")) %>%
+  dplyr::filter(Tissue == "TemporalCortex")
+
+# Cerebellum
+samples_ADcontrols_c <- samples %>%
+  dplyr::filter(Diagnosis %in% c("AD", "Control")) %>%
+  dplyr::filter(Tissue == "Cerebellum")
+
+tidyDat_t <- tidyDat %>%
+  dplyr::filter(Sample %in% samples_ADcontrols_t$SampleID)
+
+tidyDat_c <- tidyDat %>%
+  dplyr::filter(Sample %in% samples_ADcontrols_c$SampleID)
+```
+
+
+### 3. `Omics` data object
+
+- The samples/expression tidy data and gene sets must now be placed inside an 
+`Omics` object.
+
+- We have to create different `Omics` objects to test different contrasts. 
+*PathwayPCA* does not support complex designs like regular gene set testing 
+methods utilising *limma* objects. However, they do support the following 
+modes:
+
+    - Regression on a continuous variable (e.g. age)
+    - Categorical (only binary supported) (e.g. `hasPSEN` mutation)
+    - Survival (not relevant to our analysis). 
+
+- Because of this *PathwayPCA* should be able to give us some complementary 
+information/results. 
+
+### 4. AES-PCA
+
+**Has AD**
+
+- Here we test whether pathways are enriched on the binary variable `genotype` 
+using AES-PCA
+
+- Temporal cortex
+
+```{r}
+samples_genotype_t <- samples_ADcontrols_t %>%
+  dplyr::select(Sample, Diagnosis) %>%
+  dplyr::rename(response = Diagnosis)
+
+omics_genotype_t <- CreateOmics(
+  assayData_df = tidyDat_t,
+  pathwayCollection_ls = hallmarkCol,
+  response = samples_genotype_t,
+  respType = "categ"
+)
+
+# Perform enrichment testing using AES-PCA
+test_genotype_t <- AESPCA_pVals(
+  object = omics_genotype_t,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
+
+test_genotype_t$pVals_df 
+
+sigSets_t <- test_genotype_t$pVals_df %>%
+  dplyr::filter(FDR_BH < 0.05)
+
+sigSets_t
+
+```
+
+- Cerebellum
+
+```{r}
+samples_genotype_c <- samples_ADcontrols_c %>%
+  dplyr::select(Sample, Diagnosis) %>%
+  dplyr::rename(response = Diagnosis)
+
+omics_genotype_c <- CreateOmics(
+  assayData_df = tidyDat_c,
+  pathwayCollection_ls = hallmarkCol,
+  response = samples_genotype_c,
+  respType = "categ"
+)
+
+# Perform enrichment testing using AES-PCA
+test_genotype_c <- AESPCA_pVals(
+  object = omics_genotype_c,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
+
+test_genotype_c$pVals_df 
+
+sigSets_c <- test_genotype_c$pVals_df %>%
+  dplyr::filter(FDR_BH < 0.05)
+
+sigSets_c
+
+```
+
+### 5. Plots
+
+- To initially get an idea of the differences in sample-specific geneset 
+activity between cerebellum and temporal cortex samples, we will plot 
+just one gene set below (**Oxidative Phosphorylation**). 
+
+- We can see that while there is a lot of variation between different 
+samples reflecting the heterogeneity of the dataset and the patients, 
+there does appear to be a shift of AD patients having lower gene set 
+activity compared to controls. This effect seems to be slightly more 
+pronounced in the TC compared to cerebellum. 
+
+```{r}
+test_genotype_t$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>% 
+  set_rownames(attributes(test_genotype_t$PCs_ls)$sampleIDs) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
+  geom_histogram(bins = 20, position = "identity", alpha=0.5) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+  scale_colour_manual(values = c("black", "yellow"))+
+  ggtitle("Temporal Cortex: Oxidative Phosphorylation")
+```
+```{r}
+test_genotype_c$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>% 
+  set_rownames(attributes(test_genotype_c$PCs_ls)$sampleIDs) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
+  geom_histogram(bins = 20, position = "identity", alpha=0.5) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+  scale_colour_manual(values = c("black", "yellow"))+
+  ggtitle("Cerebellum: Oxidative Phosphorylation")
+```
+
+
+- All of the Hallmark gene sets will be plotted below. 
+
+- **Temporal cortex**:
+
+```{r }
+plot_TCenr <- test_genotype_t$PCs_ls %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_t$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::mutate(pathway = gsub(x = pathway,
+                               pattern = "_",
+                               replacement = " "),
+                pathway = gsub(x = pathway,
+                               pattern = "HALLMARK ",
+                               replacement = "")) %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath))+
+  facet_wrap(~pathway, scales = "free_y", ncol = 5)+
+  geom_histogram(bins = 25, position = "identity", alpha=0.5) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Genotype") +
+  scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+  scale_color_manual(values = c("black", "yellow")) 
+
+plot_TCenr
+
+# export::graph2pdf(plot_TCenr, 
+#                   here("data", "datasets", "mayo", "fig", "plot_TCenr"), 
+#                   width = 15, height=15)
+```
+
+- **Cerebellum**:
+
+```{r}
+plot_Cerenr <- test_genotype_c$PCs_ls %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_c$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::mutate(pathway = gsub(x = pathway,
+                               pattern = "_",
+                               replacement = " "),
+                pathway = gsub(x = pathway,
+                               pattern = "HALLMARK ",
+                               replacement = "")) %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath))+
+  facet_wrap(~pathway, scales = "free_y", ncol = 5)+
+  geom_histogram(bins = 25, position = "identity", alpha=0.5) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Genotype") +
+  scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+  scale_color_manual(values = c("black", "yellow")) 
+
+plot_Cerenr
+
+# export::graph2pdf(plot_Cerenr, 
+#                   here("data", "datasets", "mayo", "fig", "plot_Cerenr"), 
+#                   width = 15, height=15)
+```
+
+## 6. Patient clustering
+
+- Is it possible to identify clusters of patients based on their PC1 values 
+across the pathways?
+
+- First, we will extract the PC1 values for all Temporal Cortex samples 
+and their hallmark gene sets. 
+
+```{r}
+# Format dataframe into wide form suitable for PCA
+PC1_TCsamples <- test_genotype_t$PCs_ls %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_t$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::select(-V2) %>%
+  dcast(Sample ~ pathway, value.var = "V1") %>% 
+  column_to_rownames("Sample")
+
+head(PC1_TCsamples)
+
+# Perform just normal PCA
+PCA_TCsamples <- PC1_TCsamples %>% prcomp()
+
+PCAplot_TCsamples <- PCA_TCsamples$x %>% 
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=PC1, y = PC2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (82.5%)",
+         y = "Principal Component 2 (10.6%)", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+PCAplot_TCsamples
+
+```
+
+- From the normal PCA it doesn't look like the AD patients have 
+immediately visible clusters.
+
+- Let's show the gene set activities as well on a heatmap
+
+```{r}
+# format data
+data_for_heatmap <- PC1_TCsamples %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")])%>%
+  dplyr::arrange(Diagnosis, ApoE) %>%
+  column_to_rownames("Sample")
+
+annot_for_heatmap <- data_for_heatmap %>%
+  dplyr::select(Diagnosis, AgeAtDeath, ApoE)
+
+data_for_heatmap %<>% 
+  dplyr::select(-Diagnosis, -AgeAtDeath, -ApoE) %>%
+  t%>%
+  set_rownames(gsub(x = rownames(.),
+                              pattern = "HALLMARK_",
+                              replacement = "") )
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+plotting_heatmap <- pheatmap(data_for_heatmap,
+                             cluster_cols = FALSE,
+                             scale = "row",
+                             border_color = "white",
+                             gaps_col = 65,
+                             # cellwidth = 10,
+                             # cellheight = 10,
+                             color = palette,
+                             annotation_col = annot_for_heatmap)
+plotting_heatmap
+
+save_pheatmap_pdf(plotting_heatmap,
+                  here("data", "datasets", "mayo", "fig", 
+                       "allSamplesHeatmap.pdf"), width = 11,
+                  height = 11)
+```
+
+
+- Let's try t-SNE.
+
+```{r}
+tsne_TCsamples <- list()
+perplexitiesToTest <- c(5, 10, 20, 30, 40)
+
+for(n in perplexitiesToTest){
+  tsne_TCsamples[[n]] <-  Rtsne(PC1_TCsamples, 
+                        dims = 2, 
+                        perplexity= n, 
+                        verbose=TRUE, 
+                        theta = 0,
+                        max_iter = 1000)
+}
+
+testclust <- tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  as.matrix %>%
+  kmeans(centers = 6) 
+testclust2 <- testclust$cluster%>%
+  as.data.frame() %>% 
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+
+heatmapplot <- PC1_TCsamples %>% 
+  rownames_to_column("Sample") %>% 
+  left_join(testclust2) %>%
+  dplyr::arrange(Cluster) %>%
+  dplyr::select(-Cluster) %>%
+  column_to_rownames("Sample") %>% t 
+rownames(heatmapplot) <- gsub(x = rownames(heatmapplot),
+                              pattern = "HALLMARK_",
+                              replacement = "") 
+heatmapAnnot <- testclust2%>%
+  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")]) %>%
+  column_to_rownames("Sample") 
+
+plotHeatmap <- pheatmap::pheatmap(heatmapplot, 
+                   cluster_cols = FALSE,
+                   scale = "row",
+                   color = palette,
+                   annotation_col = heatmapAnnot)
+
+save_pheatmap_pdf(plotHeatmap, width = 8, height = 11, 
+                  filename = here("data", "datasets", "mayo",
+                                  "fig", "clusterHeatmap.pdf"))
+
+
+tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  left_join(testclust2) %>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis,
+             shape = ApoE)) +
+  geom_point(size = 5, alpha=0.3, colour = testclust2$Cluster) +
+  geom_point(alpha = 0.8,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+tsne_TCsamples[[10]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+tsne_TCsamples[[20]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+tsne_TCsamples[[30]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+tsne_TCsamples[[40]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+
+
+
+
+# tsnePlot_TCsamples <- tsne_TCsamples$Y %>%
+#   as.data.frame %>%
+#   set_colnames(c("Dim1", "Dim2")) %>%
+#   set_rownames(rownames(PC1_TCsamples)) %>%
+#   rownames_to_column("Sample") %>%
+#   left_join(samples[, c("Sample",
+#                         "Sex",
+#                         "AgeAtDeath",
+#                         "ApoE",
+#                         "Diagnosis")], by = "Sample")%>%
+#   ggplot(aes(x=Dim1, y = Dim2, 
+#              colour = Diagnosis, 
+#              shape = ApoE)) +
+#   geom_point(alpha = 0.6,size=3) +
+#   scale_shape_manual(values = c(15,16,17,18,8)) +
+#   scale_colour_manual(values = c("#999999", "orangered")) +
+#   theme(aspect.ratio = 1) +
+#     labs(x = "Principal Component 1 (82.5%)",
+#          y = "Principal Component 2 (10.6%)", 
+#          colour = "Diagnosis", shape = "ApoE\nGenotype") 
+#   
+# tsnePlot_TCsamples
+```
+
