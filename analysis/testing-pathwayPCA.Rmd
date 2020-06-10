@@ -1,5 +1,5 @@
 ---
-title: "testing-pathwayPCA"
+title: "PathwayPCA on Antonell et al dataset"
 author: "Nhi Hin"
 date: "2020-05-29"
 output: workflowr::wflow_html
@@ -16,6 +16,15 @@ library(tibble)
 library(readr)
 library(ggplot2)
 theme_set(theme_bw())
+
+save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
 ```
 
 
@@ -81,6 +90,23 @@ tidyDat <- exprs %>% log2 %>%
 
 tidyDat[1:5, 1:20]  # preview
 ```
+
+```{r}
+initial_pca <- exprs %>% log2 %>% t %>% prcomp()
+
+summary(initial_pca) # PC1; 97.1%, PC2 1%
+
+initial_pca$x %>%
+  as.data.frame %>%
+  dplyr::select(PC1, PC2) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = PC1, y = PC2, colour = group)) +
+  geom_point(size = 3, alpha = 0.6) +
+  scale_colour_manual(values = c("#999999", "orangered", "turquoise"))
+
+```
+
 
 ### 3. `Omics` data object
 
@@ -205,7 +231,7 @@ test_AD$PCs_ls$HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY %>%
 
 - All significant gene sets
 
-```{r}
+```{r eval=FALSE}
 test_AD$PCs_ls[sigSets$pathways] %>% 
   lapply(function(x){
     x %>% set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
@@ -230,7 +256,7 @@ test_AD$PCs_ls[sigSets$pathways] %>%
 ```
 
 ```{r}
-test_AD$PCs_ls[sigSets$pathways] %>% 
+plot_allGenesets <- test_AD$PCs_ls[sigSets$pathways] %>% 
   lapply(function(x){
     x %>% set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
       rownames_to_column("Sample")
@@ -243,23 +269,126 @@ test_AD$PCs_ls[sigSets$pathways] %>%
                                pattern = "HALLMARK ",
                                replacement = "")) %>%
   left_join(samples, by = "Sample") %>%
-  ggplot(aes(x = V1, fill = apoe, colour = hasAD)) + 
-  geom_histogram(bins = 8) +
+  ggplot(aes(x = V1, fill = hasAD)) + 
+  geom_histogram(bins = 8, position = "identity", alpha =0.5) +
   labs(x = "PC1 value for each sample",
        y = "Count", 
        fill = "Has AD?") +
-  scale_fill_manual(values = c("#bbbbbb", "orangered", "turquoise")) +
-  scale_colour_manual(values = c("black", "yellow"))+
+  scale_fill_manual(values = c("cornflowerblue", "orangered")) +
   facet_wrap(~pathway, scales = "free_y")
+plot_allGenesets
+
+# export::graph2pdf(plot_allGenesets, here("data", "datasets",
+#                                          "fad", "fig", "plot_allGenesets"),
+#                   width = 15, height=15)
+```
+
+## 6. Patient clustering on PC1
+
+- Get the PC1 values into wide format 
+
+```{r}
+PC1_allSamples <- test_AD$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::select(-V2) %>%
+  dcast(Sample ~ pathway, value.var = "V1") %>% 
+  column_to_rownames("Sample")
+
+head(PC1_allSamples)
+```
+
+- Perform PCA to see if there's any structure / grouping in the data
+
+```{r}
+PCA_allSamples <- PC1_allSamples %>% prcomp()
+
+PCAplot_allSamples <- PCA_allSamples$x %>%
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "sex",
+                        "age",
+                        "apoe",
+                        "psen", 
+                        "group", 
+                        "hasPsenMutation",
+                        "hasAD")], by ="Sample") %>%
+  ggplot(aes(x = PC1, y = PC2,
+             colour = group,
+             shape = sex)) + 
+  geom_point(alpha = 0.6, size = 3) +
+  scale_shape_manual(values = c(15,16, 17))+
+  scale_colour_manual(values = c("#999999", "orangered", "turquoise")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (85.3%)",
+         y = "Principal Component 2 (9.8%)", 
+         colour = "Group", shape = "Sex") 
+
+PCAplot_allSamples
+
+
 ```
 
 
+```{r}
+# format data
+data_for_heatmap <- PC1_allSamples %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample", "hasAD", "apoe", "group", "age")])%>%
+  dplyr::arrange(hasAD, apoe) 
+
+annot_for_heatmap <- data_for_heatmap %>%
+  as.data.frame %>%
+  dplyr::select(Sample, hasAD, apoe, group, age) %>%
+  dplyr::mutate(hasAD = case_when(
+    hasAD == TRUE ~ "AD",
+    hasAD == FALSE ~ "Control"
+  ),
+  age = as.numeric(age))%>%
+  dplyr::arrange(hasAD, group)%>%
+  column_to_rownames("Sample")
+  
+
+data_for_heatmap %<>% 
+    column_to_rownames("Sample") %>%
+  dplyr::select(-group, -age, -apoe, -hasAD) %>%
+  t%>%
+  set_rownames(gsub(x = rownames(.),
+                              pattern = "HALLMARK_",
+                              replacement = "") )
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+plot_heatmap <- pheatmap::pheatmap(data_for_heatmap,
+                   cluster_cols = FALSE,
+                   scale="row",
+                   color = palette,
+                   annotation_col = annot_for_heatmap,
+                   border_color = "white"
+                   )
+
+save_pheatmap_pdf(plot_heatmap, here("data", "datasets", "fad", "fig", 
+                                     "heatmap.pdf"), 
+                  width = 11, height = 11)
+```
 
 
+## todo
 
+- Check x and y gene expression to see if we can relabel samples
 
+- Boxplots instead of histograms
 
+- PC1 value turn into z-score (subtract mean divide s.d.) for each dataset and pathway. 
+Compare this standardised score between datasets. 
 
+- Check predictive variables within clusters (ApoE stacked boxplot, age of death as boxplot)
 
 
 

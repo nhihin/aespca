@@ -116,18 +116,23 @@ information/results.
 
 ### 4. AES-PCA
 
-**Has AD**
+- Here we test whether pathways are enriched on the binary variable `Diagnosis` 
+(AD or control) using AES-PCA.
 
-- Here we test whether pathways are enriched on the binary variable `genotype` 
-using AES-PCA
+- Analyses will be done separately on temporal cortex and cerebellum 
+tissues as these tissues are generally very different in their expression 
+patterns. 
 
-- Temporal cortex
+- **Temporal cortex**
 
-```{r}
+```{r message=FALSE}
+# Create the samples dataframe
 samples_genotype_t <- samples_ADcontrols_t %>%
   dplyr::select(Sample, Diagnosis) %>%
   dplyr::rename(response = Diagnosis)
 
+# Omics object requires the expression data in tidy form 
+# as well as the samples dataframe
 omics_genotype_t <- CreateOmics(
   assayData_df = tidyDat_t,
   pathwayCollection_ls = hallmarkCol,
@@ -146,18 +151,19 @@ test_genotype_t <- AESPCA_pVals(
   adjustment = c("Holm", "BH")
 )
 
+# Top ranked enriched gene sets 
 test_genotype_t$pVals_df 
 
+# Which gene sets are significant?
 sigSets_t <- test_genotype_t$pVals_df %>%
   dplyr::filter(FDR_BH < 0.05)
 
 sigSets_t
-
 ```
 
-- Cerebellum
+- **Cerebellum**
 
-```{r}
+```{r message=FALSE}
 samples_genotype_c <- samples_ADcontrols_c %>%
   dplyr::select(Sample, Diagnosis) %>%
   dplyr::rename(response = Diagnosis)
@@ -169,7 +175,6 @@ omics_genotype_c <- CreateOmics(
   respType = "categ"
 )
 
-# Perform enrichment testing using AES-PCA
 test_genotype_c <- AESPCA_pVals(
   object = omics_genotype_c,
   numReps = 0,
@@ -186,7 +191,6 @@ sigSets_c <- test_genotype_c$pVals_df %>%
   dplyr::filter(FDR_BH < 0.05)
 
 sigSets_c
-
 ```
 
 ### 5. Plots
@@ -215,6 +219,7 @@ test_genotype_t$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>%
   scale_colour_manual(values = c("black", "yellow"))+
   ggtitle("Temporal Cortex: Oxidative Phosphorylation")
 ```
+
 ```{r}
 test_genotype_c$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>% 
   set_rownames(attributes(test_genotype_c$PCs_ls)$sampleIDs) %>%
@@ -231,7 +236,7 @@ test_genotype_c$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>%
 ```
 
 
-- All of the Hallmark gene sets will be plotted below. 
+- All 50 of the Hallmark gene sets will be plotted below. 
 
 - **Temporal cortex**:
 
@@ -297,13 +302,15 @@ plot_Cerenr
 #                   width = 15, height=15)
 ```
 
+
 ## 6. Patient clustering
 
 - Is it possible to identify clusters of patients based on their PC1 values 
 across the pathways?
 
 - First, we will extract the PC1 values for all Temporal Cortex samples 
-and their hallmark gene sets. 
+and their hallmark gene sets. These PC1 values correspond to effects that 
+distinguish the Diagnosis (AD from control). 
 
 ```{r}
 # Format dataframe into wide form suitable for PCA
@@ -347,11 +354,15 @@ PCAplot_TCsamples
 ```
 
 - From the normal PCA it doesn't look like the AD patients have 
-immediately visible clusters.
+immediately visible clusters. The AD samples seem to group near 
+one side of the plot but there is considerable heterogeneity 
+amongst the control samples. The ApoE genotype seems to have some 
+correlation but this isn't anything exact as certain ApoE alleles 
+are over-represented in the data anyway. 
 
 - Let's show the gene set activities as well on a heatmap
 
-```{r}
+```{r fig.height = 11}
 # format data
 data_for_heatmap <- PC1_TCsamples %>%
   rownames_to_column("Sample") %>%
@@ -382,16 +393,32 @@ plotting_heatmap <- pheatmap(data_for_heatmap,
                              annotation_col = annot_for_heatmap)
 plotting_heatmap
 
-save_pheatmap_pdf(plotting_heatmap,
-                  here("data", "datasets", "mayo", "fig", 
-                       "allSamplesHeatmap.pdf"), width = 11,
-                  height = 11)
+# save_pheatmap_pdf(plotting_heatmap,
+#                   here("data", "datasets", "mayo", "fig", 
+#                        "allSamplesHeatmap.pdf"), width = 11,
+#                   height = 11)
 ```
 
+- The heatmap reflects what we saw in the PCA. Overall, the AD samples do 
+seem different from the Controls, but there is considerable 
+heterogeneity within the control samples. 
 
-- Let's try t-SNE.
+#### 6.2. t-SNE
 
-```{r}
+- t-SNE is a dimension reduction method that can be used to visualise 
+structure within samples similar to PCA. However, while PCA is linear, 
+t-SNE is non-linear. We will try this to see if we can see better 
+separation of samples. 
+
+- t-SNE is influenced greatly by parameter choice, particularly the 
+perplexity, which is usually a value < 50. Here we will try several 
+to see which might work better for the data. 
+
+- Note: Higher perplexity means more global structure, lower perplexity 
+to prioritise more local structure.
+
+
+```{r eval=FALSE}
 tsne_TCsamples <- list()
 perplexitiesToTest <- c(5, 10, 20, 30, 40)
 
@@ -401,42 +428,18 @@ for(n in perplexitiesToTest){
                         perplexity= n, 
                         verbose=TRUE, 
                         theta = 0,
-                        max_iter = 1000)
+                        max_iter = 1e5)
 }
+tsne_TCsamples %>% saveRDS(here("data", "datasets", "mayo",
+                                "tsne_TCsamples.rds"))
 
-testclust <- tsne_TCsamples[[5]]$Y %>%
-  as.data.frame %>%
-  set_colnames(c("Dim1", "Dim2")) %>%
-  set_rownames(rownames(PC1_TCsamples)) %>%
-  as.matrix %>%
-  kmeans(centers = 6) 
-testclust2 <- testclust$cluster%>%
-  as.data.frame() %>% 
-  rownames_to_column("Sample") %>%
-  set_colnames(c("Sample", "Cluster"))
 
-heatmapplot <- PC1_TCsamples %>% 
-  rownames_to_column("Sample") %>% 
-  left_join(testclust2) %>%
-  dplyr::arrange(Cluster) %>%
-  dplyr::select(-Cluster) %>%
-  column_to_rownames("Sample") %>% t 
-rownames(heatmapplot) <- gsub(x = rownames(heatmapplot),
-                              pattern = "HALLMARK_",
-                              replacement = "") 
-heatmapAnnot <- testclust2%>%
-  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")]) %>%
-  column_to_rownames("Sample") 
+```
 
-plotHeatmap <- pheatmap::pheatmap(heatmapplot, 
-                   cluster_cols = FALSE,
-                   scale = "row",
-                   color = palette,
-                   annotation_col = heatmapAnnot)
+```{r}
 
-save_pheatmap_pdf(plotHeatmap, width = 8, height = 11, 
-                  filename = here("data", "datasets", "mayo",
-                                  "fig", "clusterHeatmap.pdf"))
+tsne_TCsamples <- readRDS(here("data", "datasets", "mayo",
+                                "tsne_TCsamples.rds"))
 
 
 tsne_TCsamples[[5]]$Y %>%
@@ -462,6 +465,53 @@ tsne_TCsamples[[5]]$Y %>%
          y = "Dim 2", 
          colour = "Diagnosis", shape = "ApoE\nGenotype") 
 
+
+testclust <- tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  as.matrix %>%
+  kmeans(centers = 5) 
+testclust2 <- testclust$cluster%>%
+  as.data.frame() %>% 
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+
+heatmapplot <- PC1_TCsamples %>% 
+  rownames_to_column("Sample") %>% 
+  left_join(testclust2) %>%
+  left_join(samples[, c("Sample", "Diagnosis")], by = "Sample")%>%
+  dplyr::arrange(Cluster, Diagnosis) %>%
+  dplyr::select(-Cluster, -Diagnosis) %>%
+  column_to_rownames("Sample") %>% t 
+
+rownames(heatmapplot) <- gsub(x = rownames(heatmapplot),
+                              pattern = "HALLMARK_",
+                              replacement = "") 
+
+heatmapAnnot <- testclust2%>% as.data.frame%>%
+  set_rownames(.$Sample) %>%
+  magrittr::extract(colnames(heatmapplot),) %>%
+  rownames_to_column("Sample2") %>%
+  dplyr::select(-Sample) %>%
+  dplyr::rename(Sample = Sample2) %>%
+  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")]) %>%
+  column_to_rownames("Sample") 
+
+plotHeatmap <- pheatmap::pheatmap(heatmapplot, 
+                   cluster_cols = FALSE,
+                   scale = "row",
+                   color = palette,
+                   annotation_col = heatmapAnnot)
+
+# save_pheatmap_pdf(plotHeatmap, width = 11, height = 11, 
+#                   filename = here("data", "datasets", "mayo",
+#                                   "fig", "clusterHeatmap.pdf"))
+
+```
+
+
+```{r}
 tsne_TCsamples[[10]]$Y %>%
   as.data.frame %>%
   set_colnames(c("Dim1", "Dim2")) %>%
@@ -545,32 +595,5 @@ tsne_TCsamples[[40]]$Y %>%
     labs(x = "Dim 1",
          y = "Dim 2", 
          colour = "Diagnosis", shape = "ApoE\nGenotype") 
-
-
-
-
-
-# tsnePlot_TCsamples <- tsne_TCsamples$Y %>%
-#   as.data.frame %>%
-#   set_colnames(c("Dim1", "Dim2")) %>%
-#   set_rownames(rownames(PC1_TCsamples)) %>%
-#   rownames_to_column("Sample") %>%
-#   left_join(samples[, c("Sample",
-#                         "Sex",
-#                         "AgeAtDeath",
-#                         "ApoE",
-#                         "Diagnosis")], by = "Sample")%>%
-#   ggplot(aes(x=Dim1, y = Dim2, 
-#              colour = Diagnosis, 
-#              shape = ApoE)) +
-#   geom_point(alpha = 0.6,size=3) +
-#   scale_shape_manual(values = c(15,16,17,18,8)) +
-#   scale_colour_manual(values = c("#999999", "orangered")) +
-#   theme(aspect.ratio = 1) +
-#     labs(x = "Principal Component 1 (82.5%)",
-#          y = "Principal Component 2 (10.6%)", 
-#          colour = "Diagnosis", shape = "ApoE\nGenotype") 
-#   
-# tsnePlot_TCsamples
 ```
 

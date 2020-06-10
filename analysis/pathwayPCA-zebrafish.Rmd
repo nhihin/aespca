@@ -15,6 +15,15 @@ library(ggplot2)
 library(magrittr)
 library(dplyr)
 library(tibble)
+
+save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
 ```
 
 
@@ -147,10 +156,17 @@ test_genotype$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>%
   ggtitle("Oxidative Phosphorylation")
 ```
 
-- All significant gene sets
+#### 5.1. Boxplots
+
+- All Hallmark gene sets as boxplots
 
 ```{r}
-test_genotype$PCs_ls %>% 
+#scaleFUN <- function(x) sprintf("%.2f", x)
+roundSigFig <- function(x){
+  signif(x, 1)
+}
+
+PC1_plot <- test_genotype$PCs_ls %>% 
   lapply(function(x){
     x %>% set_rownames(attributes(test_genotype$PCs_ls)$sampleIDs) %>%
       rownames_to_column("Sample")
@@ -164,15 +180,178 @@ test_genotype$PCs_ls %>%
                                replacement = "")) %>%
   left_join(samples, by = "Sample") %>%
   dplyr::filter(Hypoxia == 0) %>%
-  ggplot(aes(x = V1, fill = Genotype, colour = Age))+
-  facet_wrap(~pathway, scales = "free_y")+
-  geom_histogram(bins = 8) +
-  labs(x = "PC1 value for each sample",
-       y = "Count", 
-       fill = "Genotype") +
-  scale_fill_manual(values = c( "orangered", "#bbbbbb")) +
-  scale_color_manual(values = c("black", "yellow")) 
+  ggplot(aes(x = Group, y = V1, fill = Group))+
+  facet_wrap(~pathway, scales = "free_y", ncol = 5)+
+  geom_boxplot() +
+  #geom_histogram(bins = 10, position = "identity", alpha=0.6) +
+  labs(x = "Group",
+       y = "PC1 Value", 
+       fill = "Group") +
+  scale_fill_manual(values = c( "orangered", "LightCoral",
+                                "RoyalBlue", "SkyBlue")) +
+  scale_y_continuous(labels=roundSigFig)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
 
+PC1_plot
+```
+
+#### 5.2. PCA
+
+
+- Get the PC1 values into wide format 
+
+```{r}
+PC1_allSamples <- test_genotype$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::select(-V2) %>%
+  dcast(Sample ~ pathway, value.var = "V1") %>% 
+  column_to_rownames("Sample")
+
+head(PC1_allSamples)
+```
+
+- Perform PCA to see if there's any structure / grouping in the data
+
+```{r}
+PCA_allSamples <- PC1_allSamples %>% prcomp()
+
+PCAplot_allSamples <- PCA_allSamples$x %>%
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by ="Sample") %>%
+  ggplot(aes(x = PC1, y = PC2,
+             colour = Group,
+             shape = paste0(Age, "_", Hypoxia))) + 
+  geom_point(alpha = 0.6, size = 3) +
+  scale_shape_manual(values = c(15,0,16,1))+
+  scale_colour_manual(values = c(rep("orangered",4),
+                                 rep("#999999", 4))) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (85.3%)",
+         y = "Principal Component 2 (9.8%)", 
+         colour = "Group", shape = "Age and\nHypoxia") 
+
+PCAplot_allSamples
+```
+
+
+```{r}
+# format data
+data_for_heatmap <- PC1_allSamples %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample", "Group", "Age", "Genotype", "Hypoxia",
+                        "Gender")])%>%
+  dplyr::arrange(Age, Hypoxia, Genotype) %>%
+  dplyr::filter(Age==6)
+
+annot_for_heatmap <- data_for_heatmap %>%
+  as.data.frame %>%
+  dplyr::select(Sample, Group, Age, Genotype, Hypoxia, Gender) %>%
+  dplyr::arrange(Age, Hypoxia, Genotype)%>%
+  column_to_rownames("Sample")
   
+
+data_for_heatmap %<>% 
+    column_to_rownames("Sample") %>%
+  dplyr::select(-Group, -Age, -Genotype, -Hypoxia, -Gender) %>%
+  t%>%
+  set_rownames(gsub(x = rownames(.),
+                              pattern = "HALLMARK_",
+                              replacement = "") )
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+plot_heatmap <- pheatmap::pheatmap(data_for_heatmap,
+                   cluster_cols = FALSE,
+                   scale="row",
+                   #gaps_col=seq(0,32,by=8),
+                   gaps_col=8,
+                   color = palette,
+                   annotation_col = annot_for_heatmap,
+                   border_color = "white", 
+                   cellwidth = 10, cellheight=10
+                   )
+
+```
+
+
+```{r}
+# format data
+data_for_heatmap <- PC1_allSamples %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample", "Group", "Age", "Genotype", "Hypoxia",
+                        "Gender")])%>%
+  dplyr::arrange(Age, Hypoxia, Genotype) %>%
+  dplyr::filter(Age==24)
+
+annot_for_heatmap <- data_for_heatmap %>%
+  as.data.frame %>%
+  dplyr::select(Sample, Group, Age, Genotype, Hypoxia, Gender) %>%
+  dplyr::arrange(Age, Hypoxia, Genotype)%>%
+  column_to_rownames("Sample")
+  
+
+data_for_heatmap %<>% 
+    column_to_rownames("Sample") %>%
+  dplyr::select(-Group, -Age, -Genotype, -Hypoxia, -Gender) %>%
+  t%>%
+  set_rownames(gsub(x = rownames(.),
+                              pattern = "HALLMARK_",
+                              replacement = "") )
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+plot_heatmap <- pheatmap::pheatmap(data_for_heatmap,
+                   cluster_cols = FALSE,
+                   scale="row",
+                   #gaps_col=seq(0,32,by=8),
+                   gaps_col=8,
+                   color = palette,
+                   annotation_col = annot_for_heatmap,
+                   border_color = "white", 
+                   cellwidth = 10, cellheight=10
+                   )
+
+
+```
+
+
+## Export objects
+
+- Boxplots of PC1 values 
+
+```{r}
+export::graph2pdf(PC1_plot, here("data", "datasets", "zebrafish", 
+                                 "fig", "PC1_plot.pdf"), 
+                  width = 11, height=20)
+```
+
+- PCA of PC1 values 
+
+```{r}
+PCAplot_allSamples %>% export::graph2pdf(here("data", "datasets",
+                                              "zebrafish", "fig",
+                                              "PC1_pca.pdf"))
+```
+
+- Heatmaps of PC1 values for 6 and 24 months
+
+```{r}
+save_pheatmap_pdf(plot_heatmap, here("data", "datasets", "zebrafish", "fig", 
+                                     "heatmap_6mth.pdf"), 
+                  width = 11, height = 11)
+
+save_pheatmap_pdf(plot_heatmap, here("data", "datasets", "zebrafish", "fig", 
+                                     "heatmap_24mth.pdf"), 
+                  width = 11, height = 11)
 ```
 
