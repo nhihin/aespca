@@ -15,6 +15,8 @@ library(magrittr)
 library(tibble)
 library(readr)
 library(ggplot2)
+library(stringr)
+library(AnnotationHub)
 theme_set(theme_bw())
 
 save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
@@ -59,11 +61,31 @@ corresponded to multiple genes).
 ```{r}
 hallmarkGenes <- readRDS(here("data", "datasets", "fad", "genesets",
                               "ens_h_mapped.rds"))
+keggGenes <- readRDS(here("data", "datasets", "fad", 
+                          "genesets", "kegg_mapped.rds"))
+ireGenes <- readRDS(here("data", "ireGenes", "human", "ireProbes.rds"))
+ireNames <- names(ireGenes)
+
+hallmarkGenes <- append(hallmarkGenes, ireGenes)
+keggGenes <- append(keggGenes, ireGenes)
+
+keggNames <- names(keggGenes)
 hallmarkNames <- names(hallmarkGenes)
+
+
 
 hallmarkCol <- CreatePathwayCollection(
   sets_ls = hallmarkGenes,
   TERMS = hallmarkNames
+)
+
+keggCol <- CreatePathwayCollection(
+  sets_ls = keggGenes,
+  TERMS = keggNames
+)
+
+ireCol <- CreatePathwayCollection(
+  sets_ls = ireGenes, TERMS = ireNames
 )
 ```
 
@@ -74,7 +96,10 @@ hallmarkCol <- CreatePathwayCollection(
 
 ```{r}
 exprs <- readRDS(here("data", "datasets", "fad", "procData.rds"))$exprs
-samples <- readRDS(here("data", "datasets", "fad", "procData.rds"))$samples
+rownames(exprs) <- gsub(x = rownames(exprs), pattern = "_.*$",
+                        replacement = "")
+#samples <- readRDS(here("data", "datasets", "fad", "procData.rds"))$samples
+samples <- read_csv(here("data", "datasets", "fad", "samples.csv"))
 samples %<>% set_rownames(.$geo_accession) %>% rownames_to_column("Sample")
 samples %<>% mutate(hasAD = c(rep(FALSE, 7), rep(TRUE, 14)))
 
@@ -103,8 +128,30 @@ initial_pca$x %>%
   left_join(samples, by = "Sample") %>%
   ggplot(aes(x = PC1, y = PC2, colour = group)) +
   geom_point(size = 3, alpha = 0.6) +
-  scale_colour_manual(values = c("#999999", "orangered", "turquoise"))
+  scale_colour_manual(values = c("#999999", "orangered", "turquoise"))+
+  labs(x = "Principal Component 1 (37.8%)", 
+       y = "Principal Component 2 (9.7%)",
+       colour = "Group")
 
+alzGenes <- keggGenes$KEGG_ALZHEIMERS_DISEASE
+initial_pca_alz <- exprs %>% log2 %>% as.data.frame %>%
+  rownames_to_column("probe") %>%
+  dplyr::filter(probe %in% alzGenes) %>%
+  column_to_rownames("probe") %>%
+  t %>% prcomp
+
+initial_pca_alz$x %>%
+  as.data.frame %>%
+  dplyr::select(PC1, PC2) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = PC1, y = PC2, colour = group)) +
+  geom_point(size = 3, alpha = 0.6) +
+  scale_colour_manual(values = c("#999999", "orangered", "turquoise")) +
+    ggrepel::geom_text_repel(aes(label = Sample),size=3) +
+  ggtitle("Original PCA (KEGG Alzheimer's Pathway Genes)")+
+  labs(x = "Principal Component 1 (65.5%)", 
+       y = "Principal Component 2 (8.3%)")
 ```
 
 
@@ -132,7 +179,7 @@ information/results.
 - No pathways are significantly associated with age of death however this 
 doesn't take into account whether they have AD or not.
 
-```{r}
+```{r message=FALSE}
 # To create a regression omics object, need a dataframe with 
 # Sample and response as column names
 # Here the age of death in years is the response
@@ -191,6 +238,8 @@ test_AD <- AESPCA_pVals(
   adjustment = c("Holm", "BH")
 )
 
+test_AD <- readRDS(here("data", "datasets", "fad", "test_AD_fAD.rds"))
+
 test_AD$pVals_df 
 
 sigSets <- test_AD$pVals_df %>%
@@ -210,14 +259,103 @@ sigSets
 # test_AD2$pVals_df
 ```
 
+- With KEGG instead 
+
+```{r}
+omics_AD_k <- CreateOmics(
+  assayData_df = tidyDat,
+  pathwayCollection_ls = keggCol,
+  response = samples_AD,
+  respType = "categ"
+)
+
+# Perform enrichment testing using AES-PCA
+test_AD_k <- AESPCA_pVals(
+  object = omics_AD_k,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
+
+test_AD_k$pVals_df 
+
+sigSets_k <- test_AD$pVals_df %>%
+  dplyr::filter(FWER_Holm < 0.05)
+
+sigSets_k
+```
+
+
+```{r}
+omics_AD_ire <- CreateOmics(
+  assayData_df = tidyDat,
+  pathwayCollection_ls = ireCol,
+  response = samples_AD,
+  respType = "categ"
+)
+omics_AD_ire %>% saveRDS(here("data", "datasets", "fad", "omics_AD_ire.rds"))
+
+# Perform enrichment testing using AES-PCA
+test_AD_ire <- AESPCA_pVals(
+  object = omics_AD_ire,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
+
+test_AD_ire <- readRDS(here("data", "datasets", "fad", "test_AD_ire.rds"))
+test_AD_ire$pVals_df 
+
+sigSets_ire <- test_AD_ire$pVals_df %>%
+  dplyr::filter(FWER_Holm < 0.05)
+
+sigSets_ire
+```
+
+
 ### 5. Plots
+
+- Violin plot
+
+```{r}
+ire_comparisons <- list(c("TRUE", "FALSE"))
+violin_ire_plot <- test_AD_ire$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_AD_ire$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "geneset") %>%
+  left_join(samples, by = "Sample") %>%
+  ggpubr::ggviolin(x = "hasAD", y = "V1",
+                    fill = "hasAD", add = "boxplot",
+                   add.params = list(fill = "white"),
+                   palette = c("#dddddd", "orangered")) +
+  ggpubr::stat_compare_means(comparisons = ire_comparisons)+
+  #ggpubr::stat_compare_means()  +
+  facet_wrap(~geneset, scales = "free_y") +
+  labs(y = "PC1 Value")
+
+violin_ire_plot %>% export::graph2pdf(here("data", "datasets", 
+                                           "fad", "fig", 
+                                           "violin_ire_plot"))
+```
+
 
  - **Reactive oxygen species pathway**: Samples with AD tend to have lower 
  expression of genes in this pathway compared to samples without AD. 
 
 ```{r}
-test_AD$PCs_ls$HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY %>% 
-  set_rownames(attributes(test_AD$PCs_ls)$sampleIDs) %>%
+
+
+
+test_AD_ire$PCs_ls$ire3_all %>% 
+  set_rownames(attributes(test_AD_ire$PCs_ls)$sampleIDs) %>%
   rownames_to_column("Sample") %>%
   left_join(samples, by = "Sample") %>%
   ggplot(aes(x = V1, fill = hasAD)) + 
@@ -226,7 +364,43 @@ test_AD$PCs_ls$HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY %>%
        y = "Count", 
        fill = "Has AD?") +
   scale_fill_manual(values = c("#bbbbbb", "orangered")) +
-  ggtitle("Reactive Oxygen Species Pathway")
+  ggtitle("Human - All 3' IRE")
+
+test_AD_ire$PCs_ls$ire3_hq %>% 
+  set_rownames(attributes(test_AD_ire$PCs_ls)$sampleIDs) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = hasAD)) + 
+  geom_histogram(bins = 8, colour = "white") +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("#bbbbbb", "orangered")) +
+  ggtitle("Human - High-quality 3' IRE")
+
+test_AD_ire$PCs_ls$ire5_all %>% 
+  set_rownames(attributes(test_AD_ire$PCs_ls)$sampleIDs) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = hasAD)) + 
+  geom_histogram(bins = 8, colour = "white", position = "identity", alpha=0.5) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("#bbbbbb", "orangered")) +
+  ggtitle("Human - All 5' IRE")
+
+test_AD_ire$PCs_ls$ire5_hq %>% 
+  set_rownames(attributes(test_AD_ire$PCs_ls)$sampleIDs) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = V1, fill = hasAD)) + 
+  geom_histogram(bins = 8, colour = "white", position = "identity", alpha=0.5) +
+  labs(x = "PC1 value for each sample",
+       y = "Count", 
+       fill = "Has AD?") +
+  scale_fill_manual(values = c("#bbbbbb", "orangered")) +
+  ggtitle("Human - High quality 5' IRE")
 ```
 
 - All significant gene sets
@@ -269,8 +443,10 @@ plot_allGenesets <- test_AD$PCs_ls[sigSets$pathways] %>%
                                pattern = "HALLMARK ",
                                replacement = "")) %>%
   left_join(samples, by = "Sample") %>%
-  ggplot(aes(x = V1, fill = hasAD)) + 
-  geom_histogram(bins = 8, position = "identity", alpha =0.5) +
+  #ggplot(aes(x = V1, fill = hasAD)) + 
+  ggplot(aes(x = hasAD, y = V1, fill = hasAD)) +
+  geom_boxplot() +
+  #geom_histogram(bins = 8, position = "identity", alpha =0.5) +
   labs(x = "PC1 value for each sample",
        y = "Count", 
        fill = "Has AD?") +
@@ -278,9 +454,9 @@ plot_allGenesets <- test_AD$PCs_ls[sigSets$pathways] %>%
   facet_wrap(~pathway, scales = "free_y")
 plot_allGenesets
 
-# export::graph2pdf(plot_allGenesets, here("data", "datasets",
-#                                          "fad", "fig", "plot_allGenesets"),
-#                   width = 15, height=15)
+export::graph2pdf(plot_allGenesets, here("data", "datasets",
+                                         "fad", "fig", "plot_allGenesets"),
+                  width = 15, height=15)
 ```
 
 ## 6. Patient clustering on PC1
@@ -299,6 +475,8 @@ PC1_allSamples <- test_AD$PCs_ls %>%
   column_to_rownames("Sample")
 
 head(PC1_allSamples)
+
+
 ```
 
 - Perform PCA to see if there's any structure / grouping in the data
@@ -323,16 +501,22 @@ PCAplot_allSamples <- PCA_allSamples$x %>%
              shape = sex)) + 
   geom_point(alpha = 0.6, size = 3) +
   scale_shape_manual(values = c(15,16, 17))+
+  ggrepel::geom_text_repel(aes(label = Sample), size=3) +
   scale_colour_manual(values = c("#999999", "orangered", "turquoise")) +
   theme(aspect.ratio = 1) +
     labs(x = "Principal Component 1 (85.3%)",
          y = "Principal Component 2 (9.8%)", 
-         colour = "Group", shape = "Sex") 
+         colour = "Group", shape = "Sex") +
+  ggtitle("PC1 PCA")
 
 PCAplot_allSamples
 
-
+# PCAplot_allSamples %>% export::graph2pdf(here("data","datasets",
+#                                              "fad", "figs",
+#                                              "pc1_pca.pdf"))
 ```
+
+## 7. Heatmap
 
 
 ```{r}
@@ -373,10 +557,212 @@ plot_heatmap <- pheatmap::pheatmap(data_for_heatmap,
                    border_color = "white"
                    )
 
+plot_heatmap %>% save_pheatmap_pdf(filename = here("data","datasets",
+                                        "fad", "fig","heatmap2.pdf"))
+```
+
+## 8. Check if the outlier samples are actually mislabeled
+
+- Probe-gene annotations used in the analysis of this Antonell dataset. 
+
+```{r}
+annot <- readRDS(here("data", "datasets", "fad", "annot.rds")) 
+```
+
+- Get chromosome data for these 
+
+```{r}
+ah <- AnnotationHub()
+# ah %>%
+#   subset(grepl("sapiens", species)) %>%
+#   subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH69187"]]
+genes <- genes(ensDb)
+genes <- as.data.frame(genes)
+head(genes)
+
+chrInfo <- genes %>% dplyr::select(gene_id, seqnames, gene_biotype) %>%
+  dplyr::filter(gene_biotype == "protein_coding") %>%
+  dplyr::distinct(gene_id, seqnames, .keep_all = TRUE) %>%
+  dplyr::select(-gene_biotype)
+```
+
+- Extract the sex-specific genes located on the X and Y chromosomes. 
+
+```{r}
+annot %<>% left_join(chrInfo, by = c("ENSEMBL"="gene_id")) 
+
+x_genes <- annot %>% dplyr::filter(seqnames == "X")
+y_genes <- annot %>% dplyr::filter(seqnames == "Y")
+
+```
+
+- PCA of Y genes
+
+```{r}
+ygene_pca <- exprs %>% as.data.frame %>%
+  rownames_to_column("gene") %>%
+  dplyr::filter(gene %in% y_genes$PROBEID) %>%
+  column_to_rownames("gene") %>%
+  log2  %>% t %>% prcomp()
+
+rownames(ygene_pca$x) <- gsub(x = rownames(ygene_pca$x),
+                              pattern = "_.*$", replacement = "")
+
+
+summary(ygene_pca) # PC1; 83.5%, PC2 8.6%
+
+ygene_pca$x %>%
+  as.data.frame %>%
+  dplyr::select(PC1, PC2) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = PC1, y = PC2, colour = group, shape = sex)) +
+  ggrepel::geom_text_repel(aes(label = Sample), hjust=0, vjust=0) +
+  geom_point(size = 3, alpha = 0.6) +
+  scale_colour_manual(values = c("#999999", "orangered", "turquoise"))
+```
+
+- Clear separation on PCA between male and female samples. 
+
+- From this PCA, the two outlier samples (in terms of overall PC1 expression) 
+`GSM967918` (labelled female control), and `GSM967927` (labelled male AD) do 
+seem to have the right sex labelled. 
+
+
+## z-scores
+
+- Calculate the z-scores for the PC1 values
+
+```{r}
+PC1_allSamples %>%
+  sapply(function(x){
+    x %>% summary
+  })
+
+scaled_PC1 <- PC1_allSamples %>%
+  sapply(function(x){
+    x <- (x-mean(x))/sd(x) # Calculate x-score for each Hallmark geneset
+  }) %>%
+  set_rownames(rownames(PC1_allSamples))
+
+scaled_PC1 %<>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(annot_for_heatmap[,c("hasAD","group","apoe")] %>%
+              rownames_to_column("Sample")) %>%
+  arrange(hasAD,group,apoe) %>%
+  dplyr::select(-hasAD,-group,-apoe) %>%
+  column_to_rownames("Sample")
+
+```
+
+- Import in sAD data (Temporal Cortex)
+
+```{r}
+PC1_sAD <- readRDS(here("data", "datasets", "mayo", 
+                               "PC1_TCsamples.rds")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(heatmapAnnot_sAD[,c("Diagnosis", "Cluster")] %>% 
+              rownames_to_column("Sample"))%>%
+  arrange(Cluster, Diagnosis) %>%
+  dplyr::select(-Diagnosis, -Cluster)%>%
+  column_to_rownames("Sample")
+
+heatmapAnnot_sAD <- readRDS(here("data", "datasets", "mayo", 
+                                 "heatmapAnnot.rds"))%>%
+  dplyr::select(Diagnosis, AgeAtDeath,ApoE, Cluster)
+
+scaled_PC1_sAD <- PC1_sAD %>%
+  sapply(function(x){
+    x <- (x-mean(x))/sd(x) # Calculate x-score for each Hallmark geneset
+  }) %>%
+  set_rownames(rownames(PC1_sAD)) %>% #Rearrange order
+  magrittr::extract(rownames(heatmapAnnot_sAD),)
+```
+
+- Attempt 1: Just joining the data and YOLO heatmapping it
+
+```{r}
+combinedPC1 <- rbind(scaled_PC1, scaled_PC1_sAD)
+annot_for_heatmap2 <-annot_for_heatmap %>%rownames_to_column("temp") %>%
+  dplyr::mutate(Cluster = 6,
+                apoe = gsub(x = apoe, pattern = "_", replacement="")) %>%
+  dplyr::rename(Diagnosis = group,
+                ApoE = apoe,
+                AgeAtDeath = age)%>%
+  dplyr::select(temp,Diagnosis,AgeAtDeath,ApoE,Cluster) %>%
+  column_to_rownames("temp")
+
+combinedAnnot <- rbind(annot_for_heatmap2, heatmapAnnot_sAD)
+
+combinedHeatmap <- pheatmap(combinedPC1%>%t,
+         color = palette,
+         cluster_cols = FALSE,
+         annotation_col = combinedAnnot)
+
+# save_pheatmap_pdf(combinedHeatmap, here("data", "datasets",
+#                                         "fad", "fig",
+#                                         "combinedHeatmap.pdf"),
+#                     width = 15, height=11)
+```
+
+
+```{r}
+scaled_PC1
+
+pheatmap(scaled_PC1,
+         color=palette)
+
+pheatmap::pheatmap(scaled_PC1,
+                   cluster_cols = FALSE,
+                   scale="row",
+                   color = palette,
+                   annotation_col = annot_for_heatmap,
+                   border_color = "white"
+                   )
+```
+
+
+
+## Export Objects
+
+- Sample data
+
+```{r}
+samples %>% saveRDS(here("data", "datasets", "fad", "samples.rds"))
+```
+
+
+- PC1 values
+
+```{r eval=FALSE}
+PC1_allSamples %>% saveRDS(here("data", "datasets", 
+                                "fad", "PC1_allSamples.rds"))
+
+scaled_PC1 %>% saveRDS(here("data", "datasets", "fad", "scaled_PC1.rds"))
+```
+
+- PC1 PCA
+
+```{r eval=FALSE}
+PCAplot_allSamples %>% saveRDS(here("data", "datasets", "fad", 
+                                    "PC1_pca.rds"))
+
+PCAplot_allSamples %>% export::graph2pdf(here("data", "datasets", "fad", "fig",
+                                    "PC1_pca.pdf"))
+```
+
+
+- Heatmap
+
+```{r eval=FALSE}
 save_pheatmap_pdf(plot_heatmap, here("data", "datasets", "fad", "fig", 
                                      "heatmap.pdf"), 
                   width = 11, height = 11)
 ```
+
 
 
 ## todo
