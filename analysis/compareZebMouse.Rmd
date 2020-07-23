@@ -10,6 +10,8 @@ editor_options:
 ```{r include=FALSE}
 library(here)
 library(dplyr)
+library(ggplot2)
+library(magrittr)
 theme_set(theme_bw())
 ```
 
@@ -125,17 +127,46 @@ mou2_facet3 <- mouResults2$indivTest$effectOf5XFAD_12mth$mroast %>%
   dplyr::select(-PropUp, -PropDown)
 mou2_facet3$fdr <- mouResults2$combTest$effectOf5XFAD_12mth$fdr
 mou2_facet3 %<>% mutate(significant = fdr<0.05)
+
+# Dataset 3 - 6 and 11 months old. 
+mou3_facet1 <- mouResults3$indivTest$effectOf5XFAD_6mth$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "mou_effectOfMutation_6mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown)
+mou3_facet1$fdr <- mouResults3$combTest$effectOf5XFAD_6mth$fdr
+mou3_facet1 %<>% mutate(significant = fdr<0.05)
+
+mou3_facet2 <- mouResults3$indivTest$effectOf5XFAD_11mth$mroast %>%
+  dplyr::select(Geneset, NGenes, PropUp, PropDown) %>%
+  dplyr::mutate(contrast = "mou_effectOfMutation_11mth",
+                up = NGenes * PropUp,
+                down = NGenes * PropDown,
+                notSig = NGenes - up - down) %>%
+  dplyr::select(-PropUp, -PropDown)
+mou3_facet2$fdr <- mouResults3$combTest$effectOf5XFAD_11mth$fdr
+mou3_facet2 %<>% mutate(significant = fdr<0.05)
+
 ```
 
-- Out of the 3, 6, and 12 mouse age groups, which is most similar to 
-6 month mutant zebrafish?
+- Plot both zebrafish age groups as well as mice from the dataset with 
+ages 3, 6 and 12 months. 
 
 ```{r}
-butterfly <- bind_rows(zeb_facet1, mou2_facet1, mou2_facet2,mou2_facet3) %>%
-  dplyr::mutate(Geneset = gsub(x = Geneset, pattern = "_", replacement = " "),
-                Geneset = gsub(x = Geneset, pattern = "HALLMARK", 
+butterfly <- bind_rows(zeb_facet1, zeb_facet2, 
+                       mou2_facet1, mou2_facet2,mou2_facet3) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " "),
+                Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK", 
                                replacement = "")) %>%
-  reshape2::melt(id.vars=c("Geneset","NGenes","contrast", "significant")) %>%
+  reshape2::melt(id.vars=c("Geneset",
+                           "NGenes",
+                           "contrast",
+                           "significant")) %>%
   dplyr::arrange(desc(NGenes)) %>% 
   dplyr::rename(direction = variable, ngenes = value) %>%
   dplyr::mutate(Geneset = factor(Geneset, levels = unique(Geneset)),
@@ -143,6 +174,7 @@ butterfly <- bind_rows(zeb_facet1, mou2_facet1, mou2_facet2,mou2_facet3) %>%
                                    levels = c("notSig", "down", "up")),
                 contrast = factor(contrast, 
                                   levels = c("zeb_effectOfMutation_6mth",
+                                             "zeb_effectOfMutation_24mth",
                                              "mou_effectOfMutation_3mth", 
                                              "mou_effectOfMutation_6mth", 
                                              "mou_effectOfMutation_12mth")))%>%
@@ -157,16 +189,115 @@ butterfly <- bind_rows(zeb_facet1, mou2_facet1, mou2_facet2,mou2_facet3) %>%
   facet_grid(~contrast, scales = "free") +
   #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
   scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
-  geom_text(aes(label=significant))+
   coord_flip() +
+    geom_text(aes(label=significant),vjust=0.77, hjust = 0)+
   labs(x = "Number of genes", y = "Hallmark gene set",
        fill = "Direction")
 
 butterfly
 ```
 
+- Plot the young zebrafish and young mice only.
+
 ```{r}
-butterfly2 <- bind_rows(zeb_facet1, zeb_facet2, mou2_facet2,mou2_facet3) %>%
+butterfly_young <- bind_rows(zeb_facet1, mou2_facet1) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " "),
+                Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK", 
+                               replacement = "")) %>%
+  reshape2::melt(id.vars=c("Geneset",
+                           "NGenes",
+                           "contrast",
+                           "significant")) %>%
+  dplyr::arrange(desc(NGenes)) %>% 
+  dplyr::rename(direction = variable, ngenes = value) %>%
+  dplyr::mutate(Geneset = factor(Geneset, levels = unique(Geneset)),
+                direction = factor(direction, 
+                                   levels = c("notSig", "down", "up")),
+                contrast = factor(contrast, 
+                                  levels = c("zeb_effectOfMutation_6mth",
+                                             "mou_effectOfMutation_3mth")))%>%
+  dplyr::filter(!is.na(direction)) %>%
+  dplyr::mutate(significant = case_when(
+    direction == "up" ~ " ",
+    direction == "down" ~ " ",
+    direction == "notSig" & significant == TRUE ~ "*",
+    direction == "notSig" & significant == FALSE ~ " ")) %>% 
+  ggplot(aes(x = Geneset, y = ngenes, fill = direction)) +
+  geom_col(width=0.6) +
+  facet_grid(~contrast, scales = "free") +
+  #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
+  scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
+  coord_flip() +
+    geom_text(aes(label=significant),vjust=0.77, hjust = 0)+
+  labs(x = "Number of genes", y = "Hallmark gene set",
+       fill = "Direction")
+
+butterfly_young
+
+#export::graph2ppt(butterfly_young, here("data", "initial_comparisons",
+#                                        "fig", "butterfly_young"))
+
+```
+
+- Plot the aged zebrafish and aged mice from both datasets (11 and 12 
+months). 
+
+```{r}
+butterfly_aged <- bind_rows(zeb_facet2, mou3_facet2, mou2_facet3 ) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " "),
+                Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK", 
+                               replacement = "")) %>%
+  reshape2::melt(id.vars=c("Geneset",
+                           "NGenes",
+                           "contrast",
+                           "significant")) %>%
+  dplyr::arrange(desc(NGenes)) %>% 
+  dplyr::rename(direction = variable, ngenes = value) %>%
+  dplyr::mutate(Geneset = factor(Geneset, levels = unique(Geneset)),
+                direction = factor(direction, 
+                                   levels = c("notSig", "down", "up")),
+                contrast = factor(contrast, 
+                                  levels = c("zeb_effectOfMutation_24mth",
+                                             "mou_effectOfMutation_11mth",
+                                             "mou_effectOfMutation_12mth")))%>%
+  dplyr::filter(!is.na(direction)) %>%
+  dplyr::mutate(significant = case_when(
+    direction == "up" ~ " ",
+    direction == "down" ~ " ",
+    direction == "notSig" & significant == TRUE ~ "*",
+    direction == "notSig" & significant == FALSE ~ " ")) %>% 
+  ggplot(aes(x = Geneset, y = ngenes, fill = direction)) +
+  geom_col(width=0.6) +
+  facet_grid(~contrast, scales = "free") +
+  #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
+  scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
+  coord_flip() +
+    geom_text(aes(y = NGenes, label=significant),vjust=0.77, 
+              hjust = 0, size = 5.5)+
+  labs(y = "Number of genes", x= "Hallmark gene set",
+       fill = "Direction")+
+  ylim(0,260)
+
+butterfly_aged
+
+# export::graph2ppt(butterfly_aged, here("data", "initial_comparisons",
+#                                        "fig", "butterfly_aged"))
+
+```
+
+
+
+
+
+
+```{r}
+butterfly2 <- bind_rows(zeb_facet1, zeb_facet2, mou2_facet1, mou2_facet2,mou2_facet3) %>%
   dplyr::mutate(Geneset = gsub(x = Geneset, pattern = "_", replacement = " "),
                 Geneset = gsub(x = Geneset, pattern = "HALLMARK", 
                                replacement = "")) %>%
@@ -179,6 +310,7 @@ butterfly2 <- bind_rows(zeb_facet1, zeb_facet2, mou2_facet2,mou2_facet3) %>%
                 contrast = factor(contrast, 
                                   levels = c("zeb_effectOfMutation_6mth",
                                              "zeb_effectOfMutation_24mth",
+                                             "mou_effectOfMutation_3mth", 
                                              "mou_effectOfMutation_6mth", 
                                              "mou_effectOfMutation_12mth")))%>%
   dplyr::filter(!is.na(direction)) %>%
@@ -199,7 +331,7 @@ butterfly2 <- bind_rows(zeb_facet1, zeb_facet2, mou2_facet2,mou2_facet3) %>%
 
 butterfly2
 ```
-```
+
 
 
 ```{r}

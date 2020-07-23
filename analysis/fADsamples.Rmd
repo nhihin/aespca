@@ -149,6 +149,7 @@ all(rownames(exprs) %in% annot$PROBEID)  # TRUE
 # analysis integrating other species' data  will be based on ensembl gene ids, 
 # so remove probes which do not map to ensembl gene ids. 
 annot %<>% dplyr::filter(!is.na(ENSEMBL)) 
+annot %<>% dplyr::filter(ENSEMBL != "")
 ```
 ```{r include=FALSE}
 # old
@@ -282,6 +283,15 @@ hEnr <- combinedGSEA_ma(log2(exprs), fit = fit, design = design,
                         contrasts = contrasts, idx = hallmarkIdx)
 ```
 
+```{r}
+keggGenes <- readRDS(here("data", "datasets", "fad", "genesets",
+                          "kegg_mapped.rds"))
+
+keggIdx <- limma::ids2indices(keggGenes, rownames(exprs))
+
+keggEnr <- combinedGSEA_ma(log2(exprs), fit = fit, design = design,
+                        contrasts = contrasts, idx = keggIdx)
+```
 
 
 
@@ -298,6 +308,8 @@ procData <- list(
 )
 
 procData %>% saveRDS(here("data", "datasets", "fad", "procData.rds"))
+
+annot %>% saveRDS(here("data", "datasets", "fad", "annot.rds"))
 ```
 
 - DE analysis objects
@@ -314,5 +326,6 @@ results %>% saveRDS(here("data", "datasets", "fad", "results.rds"))
 
 ```{r}
 hEnr %>% saveRDS(here("data", "datasets", "fad", "hEnr.rds"))
+keggEnr %>% saveRDS(here("data", "datasets", "fad", "keggEnr.rds"))
 ```
 

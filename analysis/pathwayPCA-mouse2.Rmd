@@ -15,6 +15,15 @@ library(ggplot2)
 library(magrittr)
 library(dplyr)
 library(tibble)
+
+save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
 ```
 
 
@@ -51,13 +60,27 @@ exprs <- readRDS(here("data", "datasets", "mouse",
 samples <- readRDS(here("data", "datasets", "mouse", 
                         "GSE142633", "dge.rds"))$samples
 samples %<>% rownames_to_column("Sample")
+samples$genotype %<>% as.factor %>% relevel("WT")
 
-tidyDat <- exprs %>% 
+# Subset different age groups
+samples_6mth <- samples %>% 
+  dplyr::filter(age == 6)
+exprs_6mth <- exprs[, samples_6mth$Sample]
+
+samples_11mth <- samples %>% 
+  dplyr::filter(age == 11)
+exprs_11mth <- exprs[, samples_11mth$Sample]
+
+# tidyData objects for each age group
+tidyDat_6mth <- exprs_6mth %>%
   as.data.frame %>%
-  rownames_to_column("gene") %>% 
+  rownames_to_column("gene") %>%
   TransposeAssay()
 
-tidyDat[1:5, 1:20]  # preview
+tidyDat_11mth <- exprs_11mth %>%
+  as.data.frame %>%
+  rownames_to_column("gene") %>%
+  TransposeAssay()
 ```
 
 ### 3. `Omics` data object
@@ -85,20 +108,34 @@ information/results.
 using AES-PCA
 
 ```{r}
-samples_genotype <- samples %>%
+# The CreateOmics function will only take a response dataframe with one 
+# column so we need to subset the sample tables for the different ages.
+samples_genotype_6mth <- samples_6mth %>%
   dplyr::select(Sample, genotype) %>%
   dplyr::rename(response = genotype)
 
-omics_genotype <- CreateOmics(
-  assayData_df = tidyDat,
+samples_genotype_11mth <- samples_11mth %>%
+  dplyr::select(Sample, genotype) %>%
+  dplyr::rename(response = genotype)
+
+# Create Omics object for each age group
+omics_genotype_6mth <- CreateOmics(
+  assayData_df = tidyDat_6mth,
   pathwayCollection_ls = hallmarkCol,
-  response = samples_genotype,
+  response = samples_genotype_6mth,
   respType = "categ"
 )
 
-# Perform enrichment testing using AES-PCA
-test_genotype <- AESPCA_pVals(
-  object = omics_genotype,
+omics_genotype_11mth <- CreateOmics(
+  assayData_df = tidyDat_11mth,
+  pathwayCollection_ls = hallmarkCol,
+  response = samples_genotype_11mth,
+  respType = "categ"
+)
+
+# Perform enrichment testing using AES-PCA for each age group
+test_genotype_6mth <- AESPCA_pVals(
+  object = omics_genotype_6mth,
   numReps = 0,
   numPCs = 2,
   parallel = TRUE,
@@ -107,26 +144,194 @@ test_genotype <- AESPCA_pVals(
   adjustment = c("Holm", "BH")
 )
 
-test_genotype$pVals_df 
+test_genotype_11mth <- AESPCA_pVals(
+  object = omics_genotype_11mth,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)
 
-sigSets <- test_genotype$pVals_df %>%
-  dplyr::filter(FWER_Holm < 0.05)
+# Get p-values
+test_genotype_6mth$pVals_df 
+test_genotype_11mth$pVals_df
 
-sigSets
+sigSets_6mth <- test_genotype_6mth$pVals_df %>%
+  dplyr::filter(FDR_BH < 0.05)
 
-# Perform enrichment testing using Supervised PCA
-# test_AD2 <- SuperPCA_pVals(
-#   object = omics_AD,
-#   numPCs = 2,
-#   parallel = TRUE,
-#   numCores = 2,
-#   adjustpValues = TRUE,
-#   adjustment = c("SidakSS", "BY")
-# )
-# test_AD2$pVals_df
+sigSets_11mth <- test_genotype_11mth$pVals_df %>%
+  dplyr::filter(FDR_BH < 0.05)
+
+sigSets_6mth
+sigSets_11mth
 ```
 
-### 5. Plots
+### 5. Visualisation
+
+#### Get PC1 values into wide format
+
+- In order to make plots/visualisations it would be easier to get the PC1 
+values into the same format as a typical counts matrix. 
+
+```{r}
+# PC1 values for 6 month olds
+PC1_6mths <- test_genotype_6mth$PCs_ls %>%
+   lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_6mth$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::select(-V2) %>%
+  dcast(Sample ~ pathway, value.var = "V1") %>% 
+  column_to_rownames("Sample")
+head(PC1_6mths)
+
+# PC1 values for 11 month olds
+PC1_11mths <- test_genotype_11mth$PCs_ls %>%
+   lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_11mth$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::select(-V2) %>%
+  dcast(Sample ~ pathway, value.var = "V1") %>% 
+  column_to_rownames("Sample")
+head(PC1_11mths)
+```
+
+
+#### PCA of PC1 values
+
+- perform PCA to see if there's structure or grouping in the data. 
+
+- 6 months
+
+```{r}
+PCA_6mths <- PC1_6mths %>% prcomp()
+summary(PCA_6mths) #PC1 80.5% PC2 12.3%
+
+PCAplot_6mths <- PCA_6mths$x %>%
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by ="Sample") %>%
+  ggplot(aes(x = PC1, y = PC2,
+             colour = paste0(age, "_", genotype))) + 
+  geom_point(alpha = 0.6, size = 3) +
+  scale_colour_manual(values = c( "orangered", "#555555")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (80.5%)",
+         y = "Principal Component 2 (12.3%)", 
+         colour = "Group", shape = "Group") 
+PCAplot_6mths
+```
+
+- 11 months
+
+```{r}
+PCA_11mths <- PC1_11mths %>% prcomp()
+summary(PCA_11mths) #PC1 80.5% PC2 12.3%
+
+PCAplot_11mths <- PCA_11mths$x %>%
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples, by ="Sample") %>%
+  ggplot(aes(x = PC1, y = PC2,
+             colour = paste0(age, "_", genotype))) + 
+  geom_point(alpha = 0.6, size = 3) +
+  scale_colour_manual(values = c( "orangered", "#555555")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (80.5%)",
+         y = "Principal Component 2 (12.3%)", 
+         colour = "Group", shape = "Group") 
+PCAplot_11mths
+```
+
+- There is separation between 5XFAD and controls at both age groups. 
+
+#### Heatmaps
+
+- 6 months
+
+```{r}
+# format data
+data_for_heatmap_6mths <- PC1_6mths %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample", "genotype", "sex")])%>%
+  dplyr::arrange(genotype) 
+
+annot_for_heatmap_6mths <- data_for_heatmap_6mths %>%
+  as.data.frame %>%
+  dplyr::select(Sample, genotype, sex) %>%
+  dplyr::arrange(genotype)%>%
+  column_to_rownames("Sample")
+  
+data_for_heatmap_6mths %<>% 
+    column_to_rownames("Sample") %>%
+  dplyr::select(-genotype, -sex) %>%
+  t%>%
+  set_rownames(gsub(x = rownames(.),
+                              pattern = "HALLMARK_",
+                              replacement = "") )
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+plot_heatmap_6mth <- pheatmap::pheatmap(data_for_heatmap_6mths,
+                   cluster_cols = FALSE,
+                   #scale="row",
+                   #gaps_col=seq(0,32,by=8),
+                   gaps_col=4,
+                   color = palette,
+                   annotation_col = annot_for_heatmap_6mths,
+                   border_color = "white", 
+                   cellwidth = 10, cellheight=10
+                   )
+```
+
+- 11 months
+
+```{r}
+# format data
+data_for_heatmap_11mths <- PC1_11mths %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample", "genotype", "sex")])%>%
+  dplyr::arrange(genotype) 
+
+annot_for_heatmap_11mths <- data_for_heatmap_11mths %>%
+  as.data.frame %>%
+  dplyr::select(Sample, genotype, sex) %>%
+  dplyr::arrange(genotype)%>%
+  column_to_rownames("Sample")
+  
+data_for_heatmap_11mths %<>% 
+    column_to_rownames("Sample") %>%
+  dplyr::select(-genotype, -sex) %>%
+  t%>%
+  set_rownames(gsub(x = rownames(.),
+                              pattern = "HALLMARK_",
+                              replacement = "") )
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+plot_heatmap_11mth <- pheatmap::pheatmap(data_for_heatmap_11mths,
+                   cluster_cols = FALSE,
+                   #scale="row",
+                   #gaps_col=seq(0,32,by=8),
+                   gaps_col=3,
+                   color = palette,
+                   annotation_col = annot_for_heatmap_11mths,
+                   border_color = "white", 
+                   cellwidth = 10, cellheight=10
+                   )
+```
+
+
+#### Histogram
 
  - **Reactive oxygen species pathway**: Samples with AD tend to have lower 
  expression of genes in this pathway compared to samples without AD. 
@@ -170,5 +375,88 @@ test_genotype$PCs_ls[sigSets$pathways] %>%
   scale_color_manual(values = c("black", "yellow")) + 
   facet_wrap(~pathway, scales = "free_y")
   
+```
+
+#### Boxplots
+
+```{r}
+roundSigFig <- function(x){
+  signif(x, 1)
+}
+
+PC1_plot <- test_genotype$PCs_ls %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::mutate(pathway = gsub(x = pathway,
+                               pattern = "_",
+                               replacement = " "),
+                pathway = gsub(x = pathway,
+                               pattern = "HALLMARK ",
+                               replacement = "")) %>%
+  left_join(samples, by = "Sample") %>%
+  ggplot(aes(x = paste0(age,"_",genotype), y = V1,
+             fill = paste0(age,"_",genotype)))+
+  facet_wrap(~pathway, scales = "free_y", ncol = 5)+
+  geom_boxplot() +
+  #geom_histogram(bins = 10, position = "identity", alpha=0.6) +
+  labs(x = "Genotype",
+       y = "PC1 Value", 
+       fill = "Genotype") +
+  # 3 age groups and 2 genotypes so need 6 colours
+  scale_fill_manual(values = c( "orangered", "LightCoral", 
+                                "RoyalBlue", "SkyBlue",
+                                "ForestGreen", "LightGreen")) +
+  scale_y_continuous(labels=roundSigFig)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+PC1_plot
+```
+
+
+## Export Objects
+
+- PC1 values
+
+```{r eval=FALSE}
+PC1_6mths %>% saveRDS(here("data", "datasets","mouse",
+                           "GSE142633","PC1_6mths.rds"))
+
+PC1_11mths %>% saveRDS(here("data", "datasets","mouse",
+                           "GSE142633","PC1_11mths.rds"))
+```
+
+- Heatmaps
+
+```{r}
+plot_heatmap_6mth %>% save_pheatmap_pdf(here("data", "datasets","mouse",
+                           "GSE142633","fig","plot_heatmap_6mth.pdf"))
+plot_heatmap_11mth %>% save_pheatmap_pdf(here("data", "datasets","mouse",
+                           "GSE142633","fig","plot_heatmap_11mth.pdf"))
+```
+
+
+- PCA
+
+```{r eval=FALSE}
+PCAplot_allSamples %>% export::graph2pdf(here("data", "datasets", "mouse", 
+                                "GSE142633","fig", "PC1_PCA.pdf"))
+```
+
+- Boxplots
+
+```{r eval=FALSE}
+PC1_plot %>% export::graph2pdf(here("data", "datasets", "mouse", 
+                                "GSE142633","fig", "PC1_Boxplots.pdf"),
+                               width = 15, height = 25)
+```
+
+
+```{r}
+GSE142633
 ```
 

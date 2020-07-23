@@ -7,9 +7,143 @@ editor_options:
   chunk_output_type: console
 ---
 
-## Introduction
+```{r}
+library(GSEABase)
+library(hugene11sttranscriptcluster.db)
+```
+
 
 ```{r}
+genesetsDir <- "~/Documents/GitHub/q96k97/R/GSEA/data/human/"
 
+h <- getGmt(file.path(genesetsDir, "h.all.v7.0.entrez.gmt"))    # Hallmark gene sets
+c1 <- getGmt(file.path(genesetsDir, "c1.all.v7.0.entrez.gmt"))  # positional gene sets
+c2 <- getGmt(file.path(genesetsDir, "c2.all.v7.0.entrez.gmt"))  # curated gene sets
+c3 <- getGmt(file.path(genesetsDir, "c3.all.v7.0.entrez.gmt"))  # motif gene sets
+c4 <- getGmt(file.path(genesetsDir, "c4.all.v7.0.entrez.gmt"))  # computational gene sets
+c5 <- getGmt(file.path(genesetsDir, "c5.all.v7.0.entrez.gmt"))  # GO gene sets
+c6 <- getGmt(file.path(genesetsDir, "c6.all.v7.0.entrez.gmt"))  # oncogenic signatures gene sets
+c7 <- getGmt(file.path(genesetsDir, "c7.all.v7.0.entrez.gmt"))  # immunologic signatures gene sets
+
+
+# Convert each gene sets to list where the name of each list is the gene set
+# name and the list items are the entrezgenes. 
+h_l <- geneIds(h) %>% as.list
+c1_l <- geneIds(c1) %>% as.list
+c2_l <- geneIds(c2) %>% as.list
+c3_l <- geneIds(c3) %>% as.list
+c4_l <- geneIds(c4) %>% as.list
+c5_l <- geneIds(c5) %>% as.list
+c6_l <- geneIds(c6) %>% as.list
+c7_l <- geneIds(c7) %>% as.list
+
+# Bind the list of gene sets so that each list becomes a data.frame.
+h_df <- lapply(h_l, cbind)
+c1_df <- lapply(c1_l, cbind)
+c2_df <- lapply(c2_l, cbind)
+c3_df <- lapply(c3_l, cbind)
+c4_df <- lapply(c4_l, cbind)
+c5_df <- lapply(c5_l, cbind)
+c6_df <- lapply(c6_l, cbind)
+c7_df <- lapply(c7_l, cbind)
+```
+
+## 1.1. Convert human entrezgene -> human probeset
+
+```{r}
+exprs <- readRDS(here("data", "datasets", "fad", "procData.rds"))$exprs
+annot2 <- AnnotationDbi::select(
+  x = hugene11sttranscriptcluster.db, 
+  keys = rownames(exprs),
+  columns = c("PROBEID", "ENTREZID"),
+  keytype = "PROBEID"
+)
+annot2 %<>% dplyr::filter(ENTREZID != "",
+                          !is.na(ENTREZID))
+
+map_human_entrez2Annot <- function(x) {
+  x %>% 
+    as.data.frame %>% 
+    set_colnames("ENTREZID") %>%
+    left_join(annot2, by = "ENTREZID") %>% 
+    dplyr::filter(complete.cases(.)) %>%
+    dplyr::select(-ENTREZID) %>%
+    as.list %>%
+    unname %>%
+    .[[1]] %>%
+    unique
+}
+
+h_mapped <- lapply(h_df, map_human_entrez2Annot)
+c1_mapped <- lapply(c1_df, map_human_entrez2Annot)
+c2_mapped <- lapply(c2_df, map_human_entrez2Annot) 
+c3_mapped <- lapply(c3_df, map_human_entrez2Annot)
+c4_mapped <- lapply(c4_df, map_human_entrez2Annot)
+c5_mapped <- lapply(c5_df, map_human_entrez2Annot)
+c6_mapped <- lapply(c6_df, map_human_entrez2Annot)
+c7_mapped <- lapply(c7_df, map_human_entrez2Annot)
+
+genesetsDir <-  here("data", "datasets", "fad", "genesets")
+
+h_mapped %>% saveRDS(file.path(genesetsDir, "ens_h_mapped.rds"))
+c1_mapped %>% saveRDS(file.path(genesetsDir, "ens_c1_mapped.rds"))
+c2_mapped %>% saveRDS(file.path(genesetsDir, "ens_c2_mapped.rds"))
+c3_mapped %>% saveRDS(file.path(genesetsDir, "ens_c3_mapped.rds"))
+c4_mapped %>% saveRDS(file.path(genesetsDir, "ens_c4_mapped.rds"))
+c5_mapped %>% saveRDS(file.path(genesetsDir, "ens_c5_mapped.rds"))
+c6_mapped %>% saveRDS(file.path(genesetsDir, "ens_c6_mapped.rds"))
+c7_mapped %>% saveRDS(file.path(genesetsDir, "ens_c7_mapped.rds"))
+kegg_mapped %>% saveRDS(file.path(genesetsDir, "kegg_mapped.rds"))
+
+```
+
+```{r}
+h_mapped <- readRDS(file.path(genesetsDir, "ens_h_mapped.rds"))
+c1_mapped <- readRDS(file.path(genesetsDir, "ens_c1_mapped.rds"))
+c2_mapped <- readRDS(file.path(genesetsDir, "ens_c2_mapped.rds"))
+c3_mapped <- readRDS(file.path(genesetsDir, "ens_c3_mapped.rds"))
+c4_mapped <- readRDS(file.path(genesetsDir, "ens_c4_mapped.rds"))
+c5_mapped <- readRDS(file.path(genesetsDir, "ens_c5_mapped.rds"))
+c6_mapped <- readRDS(file.path(genesetsDir, "ens_c6_mapped.rds"))
+c7_mapped <- readRDS(file.path(genesetsDir, "ens_c7_mapped.rds"))
+```
+
+```{r}
+kegg_mapped <- c2_mapped[(names(c2_mapped) %>% str_detect("KEGG"))]
+```
+
+## 1.2. IRE Genes
+
+- We already have the IRE genes as human ensembl IDs. Here we will convert 
+them into the probesets. 
+
+```{r}
+ireGenes <- readRDS(here("data", "ireGenes", "human", "ireGenes.rds"))
+ireGenes_df <- lapply(ireGenes, cbind)
+exprs <- readRDS(here("data", "datasets", "fad", "procData.rds"))$exprs
+annot2 <- AnnotationDbi::select(
+  x = hugene11sttranscriptcluster.db, 
+  keys = rownames(exprs),
+  columns = c("PROBEID", "ENSEMBL"),
+  keytype = "PROBEID"
+)
+annot2 %<>% dplyr::filter(ENSEMBL != "",
+                          !is.na(ENSEMBL))
+
+map_human_ens2Annot <- function(x){
+  x %>%
+    as.data.frame %>%
+    set_colnames("ENSEMBL") %>%
+    left_join(annot2, by = "ENSEMBL") %>%
+    dplyr::filter(complete.cases(.)) %>%
+    dplyr::select(-ENSEMBL) %>%
+    as.list() %>%
+    unname %>%
+    .[[1]] %>%
+    unique
+}
+
+ire_mapped <- lapply(ireGenes_df, map_human_ens2Annot)
+ire_mapped %>% saveRDS(here("data", "ireGenes", "human", "ireProbes.rds"))
 ```
 

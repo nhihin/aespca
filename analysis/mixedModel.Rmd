@@ -1,0 +1,682 @@
+---
+title: "Mixed Model Analysis"
+author: "Nhi Hin"
+date: "2020-07-03"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+library(dplyr)
+library(reshape2)
+library(magrittr)
+library(lmtest)
+library(lmerTest)
+library(lme4)
+```
+
+
+## 1. Import Data
+
+### 1.1. Import PC1 values
+
+- Import in the PC1 values previously determined using *PathwayPCA*. 
+
+- For the animal datasets (zebrafish and mouse) we have performed 
+*PathwayPCA* separately for each age group, as otherwise the effect 
+of age in the gene expression patterns is too strong and obscures our 
+ability to visualise differences between mutant and wild type samples. 
+
+- As the human datasets (fAD and Mayo) are on cohorts of similar ages 
+and all brains are post-mortem, the effect of age is not so pronounced 
+and so *PathwayPCA* was run on the entire dataset. 
+
+```{r}
+# Q96_K97del/+ and WT zebrafish - whole brain 
+pc1_zeb <- list(
+  age_6mths = readRDS(here("data", "datasets", "zebrafish",
+                           "PC1_6mths.rds")),
+  age_24mths = readRDS(here("data", "datasets", "zebrafish",
+                            "PC1_24mths.rds"))
+)
+
+# 5XFAD and WT mice dataset 1 - cortex
+pc1_mouse1 <- list(
+  age_3mths = readRDS(here("data", "datasets", "mouse", "GSE140286",
+                           "PC1_3mths.rds")),
+  age_6mths = readRDS(here("data", "datasets", "mouse", "GSE140286",
+                           "PC1_6mths.rds")),
+  age_12mths = readRDS(here("data", "datasets", "mouse", "GSE140286",
+                           "PC1_12mths.rds"))
+)
+
+# 5XFAD and WT mice dataset 2 - cortex
+pc1_mouse2 <- list(
+  age_6mths = readRDS(here("data", "datasets","mouse",
+                           "GSE142633","PC1_6mths.rds")),
+  age_11mths = readRDS(here("data", "datasets","mouse",
+                           "GSE142633","PC1_11mths.rds"))
+)
+
+# eoAD, eoAD due to PSEN1 mutation, and Control 
+pc1_fad <- readRDS(here("data", "datasets", "fad", "PC1_allSamples.rds"))
+
+# AD and controls - Temporal Cortex
+pc1_mayo <- readRDS(here("data", "datasets", "mayo", "PC1_TCsamples.rds"))
+```
+
+### 1.2. Import Sample Annotation
+
+```{r}
+# Zebrafish dataset
+samples_zeb <- readRDS(here("data", "datasets", "zebrafish", 
+                        "dge.rds"))$samples
+samples_zeb$Genotype %<>% as.factor %>% relevel("wt")
+samples_zeb <- list(
+  age_6mths = samples_zeb %>% dplyr::filter(Age == 6,
+                                            Hypoxia == 0),
+  age_24mths = samples_zeb %>% dplyr::filter(Age == 24,
+                                             Hypoxia == 0)
+)
+
+# Mouse datasets
+samples_mouse1 <- readRDS(here("data", "datasets", "mouse", 
+                        "GSE140286", "dge.rds"))$samples %>%
+  rownames_to_column("Sample")
+samples_mouse1$genotype %<>% relevel("WT")
+samples_mouse1 <- list(
+  age_3mths = samples_mouse1 %>% dplyr::filter(age == 3),
+  age_6mths = samples_mouse1 %>% dplyr::filter(age == 6),
+  age_12mths = samples_mouse1 %>% dplyr::filter(age == 12)
+)
+
+samples_mouse2 <- readRDS(here("data", "datasets", "mouse", 
+                        "GSE142633", "dge.rds"))$samples %>%
+  rownames_to_column("Sample")
+samples_mouse2$genotype %<>% as.factor %>% relevel("WT")
+samples_mouse2 <- list(
+  age_6mths = samples_mouse2 %>% dplyr::filter(age == 6),
+  age_11mths = samples_mouse2 %>% dplyr::filter(age == 11)
+)
+
+# Human datasets
+samples_fad <- readRDS(here("data", "datasets", "fad", 
+                            "samples.rds"))
+
+samples_mayo <- readRDS(here("data", "datasets", "mayo", 
+                             "dge.rds"))$samples %>%
+  dplyr::filter(Tissue == "TemporalCortex")
+```
+
+- The ordering of samples needs to be adjusted so that they are in order 
+of condition / group
+
+```{r}
+# Zebrafish samples are already in order but we will just select the 
+# relevant columns
+samples_zeb %<>%
+  lapply(function(x){
+    x %>%
+      dplyr::rename(Sample = sample,
+                    age = Age,
+                    genotype = Genotype) %>%
+      dplyr::select(Sample, age, genotype)
+  })
+pc1_zeb$age_6mths %<>% magrittr::extract(samples_zeb$age_6mths$Sample,) 
+pc1_zeb$age_24mths %<>% magrittr::extract(samples_zeb$age_24mths$Sample,) 
+
+# Mouse samples
+samples_mouse1 %<>%
+  lapply(function(x){
+    x %<>% dplyr::mutate(genotype = gsub(x = genotype,
+                                        pattern = "WT",
+                                        replacement = "wt"))
+    x$genotype %<>% as.factor %>% relevel("wt") 
+    x %<>% dplyr::arrange(genotype) %>%
+      dplyr::select(Sample, age, genotype) %>%
+      dplyr::mutate(age = as.factor(age))
+  })
+pc1_mouse1$age_3mths %<>% magrittr::extract(samples_mouse1$age_3mths$Sample,) 
+pc1_mouse1$age_6mths %<>% magrittr::extract(samples_mouse1$age_6mths$Sample,) 
+pc1_mouse1$age_12mths %<>% magrittr::extract(samples_mouse1$age_12mths$Sample,) 
+
+samples_mouse2 %<>%
+  lapply(function(x){
+    x %<>% dplyr::mutate(genotype = gsub(x = genotype,
+                                        pattern = "WT",
+                                        replacement = "wt"))
+    x$genotype %<>% as.factor %>% relevel("wt") 
+    x %<>% dplyr::arrange(genotype) %>%
+      dplyr::select(Sample, age, genotype) %>%
+      dplyr::mutate(age = as.factor(age))
+  })
+pc1_mouse2$age_6mths %<>% magrittr::extract(samples_mouse2$age_6mths$Sample,) 
+pc1_mouse2$age_11mths %<>% magrittr::extract(samples_mouse2$age_11mths$Sample,) 
+
+# Human samples
+combinedAnnot_human <- readRDS(here("data", "PC1", "combinedAnnot.rds")) %>%
+  rownames_to_column("Sample") %>%
+  dplyr::select(Sample, Cluster, Diagnosis) %>%
+  dplyr::rename(Group = Diagnosis)
+
+samples_fad <- combinedAnnot_human %>% 
+  dplyr::filter(Cluster == 6)
+samples_fad$Group %<>% relevel("control")
+
+samples_mayo  <- combinedAnnot_human %>%
+  dplyr::filter(Cluster != 6)
+samples_mayo$Group %<>% relevel("control")
+```
+
+## 2. Scale Data
+
+- Each dataset will be standardised to make them more comparable when 
+comparing across datasets.
+
+- We will scale each dataset by its mean and standard deviation as 
+follows. 
+
+```{r}
+scaleData <- function(x){
+  x <- as.matrix(x)
+  mean <- mean(x)
+  sd <- sd(x)
+  
+  scaled_x <- (x-mean)/sd
+  return(scaled_x)
+}
+```
+
+```{r}
+scaled_pc1_zeb <- pc1_zeb %>% lapply(scaleData) 
+ 
+scaled_pc1_mouse1 <- pc1_mouse1 %>% lapply(scaleData) 
+
+scaled_pc1_mouse2 <- pc1_mouse2 %>% lapply(scaleData)
+
+scaled_pc1_fad <- pc1_fad %>% scaleData
+
+scaled_pc1_mayo <- pc1_mayo %>% scaleData
+```
+
+## 3. Testing for significant differences between AD and control
+
+- We will use a linear mixed model that accounts for the dataset as a 
+random effect to test for significant differences between AD (or AD-like 
+model) and controls. 
+
+### 3.1. fAD-like zebrafish and human fAD dataset
+
+```{r}
+# Combine pc1 values into 1 data.frame
+pc1_zebAndfAD <- rbind(scaled_pc1_zeb$age_24mths,
+                       scaled_pc1_fad)
+
+# Combine samples into 1 data.frame
+samples_zebAndfAD <- samples_zeb$age_24mths %>%
+  dplyr::mutate(Group = case_when(
+    genotype == "wt" ~ "control",
+    genotype == "q96" ~ "AD"
+  )) %>%
+  dplyr::select(-age, -genotype) %>%
+  bind_rows(samples_fad[, c("Sample", "Group")]) %>%
+  dplyr::mutate(Group = gsub(x = Group,
+                             pattern = "eoAD|eoAD_psen1",
+                             replacement = "AD")) %>%
+  dplyr::mutate(Dataset = c(rep("zebrafish", 8),
+                            rep("fad", 21)))
+samples_zebAndfAD$Group %<>% as.factor %>% relevel("control")
+
+# Test significance of AD vs control for each gene set within each 
+# dataset
+results_zebAndfAD <- pc1_zebAndfAD %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_zebAndfAD, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Group", "Dataset")) %>%
+  split(.$variable) %>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ Group + (1|Dataset))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "GroupAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+
+```
+
+### 3.2. 5XFAD mice and human fAD dataset
+
+```{r}
+# Combine pc1 values into 1 data.frame
+pc1_mouseAndfAD <- rbind(scaled_pc1_mouse2$age_11mths,
+                       scaled_pc1_fad)
+
+# Combine samples into 1 data.frame
+samples_mouseAndfAD <- samples_mouse2$age_11mths %>%
+  dplyr::mutate(Group = case_when(
+    genotype == "wt" ~ "control",
+    genotype == "5XFAD" ~ "AD"
+  )) %>%
+  dplyr::select(-age, -genotype) %>%
+  bind_rows(samples_fad[, c("Sample", "Group")])%>%
+  dplyr::mutate(Group = gsub(x = Group,
+                             pattern = "eoAD|eoAD_psen1",
+                             replacement = "AD"))%>%
+  dplyr::mutate(Dataset = c(rep("mouse2", 6),
+                            rep("fad", 21)))
+samples_mouseAndfAD$Group %<>% as.factor %>% relevel("control")
+  
+# Test significance of AD vs control for each gene set within each 
+# dataset
+results_mouseAndfAD <-  pc1_mouseAndfAD%>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_mouseAndfAD, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Group", "Dataset")) %>%
+  split(.$variable) %>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ Group + (1|Dataset))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "GroupAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+```
+
+- For the other mouse dataset (less reliable due to small sample size)
+
+```{r}
+# Combine pc1 values into 1 data.frame
+pc1_mouseAndfAD2 <- rbind(scaled_pc1_mouse1$age_12mths,
+                       scaled_pc1_fad)
+
+# Combine samples into 1 data.frame
+samples_mouseAndfAD2 <- samples_mouse1$age_12mths %>%
+  dplyr::mutate(Group = case_when(
+    genotype == "wt" ~ "control",
+    genotype == "5XFAD" ~ "AD"
+  )) %>%
+  dplyr::select(-age, -genotype) %>%
+  bind_rows(samples_fad[, c("Sample", "Group")])%>%
+  dplyr::mutate(Group = gsub(x = Group,
+                             pattern = "eoAD|eoAD_psen1",
+                             replacement = "AD"))%>%
+  dplyr::mutate(Dataset = c(rep("mouse1", 5),
+                            rep("fad", 21)))
+samples_mouseAndfAD2$Group %<>% as.factor %>% relevel("control")
+  
+# Test significance of AD vs control for each gene set within each 
+# dataset
+results_mouseAndfAD2 <-  pc1_mouseAndfAD2%>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_mouseAndfAD2, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Group", "Dataset")) %>%
+  split(.$variable) %>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ Group + (1|Dataset))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "GroupAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+```
+
+### Comparing zebrafish and mouse
+
+```{r}
+genesets_zm <- results_zebAndfAD %>%
+  dplyr::select(Geneset, Estimate, adj_p,sig) %>%
+  set_colnames(c("Geneset", "estimate_zeb", "adj_p_zeb", "sig_zeb")) %>%
+  left_join(results_mouseAndfAD %>%
+              dplyr::select(Geneset, Estimate, adj_p, sig) %>%
+              set_colnames(c("Geneset", "estimate_mouse", "adj_p_mouse",
+                             "sig_mouse"))) %>%
+  dplyr::filter(adj_p_zeb < 0.05 | adj_p_mouse < 0.05) 
+
+```
+
+- Heatmap
+
+```{r warning=FALSE, message=FALSE}
+# Heatmap palette
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+# Format fAD samples data.frame a bit so it has the same columns as 
+# zeb and mouse samples
+samples_fad2 <- samples_fad %>% 
+              dplyr::rename(Dataset = Cluster) %>%
+              dplyr::mutate(Dataset = case_when(Dataset == 6 ~ "fAD"))
+
+# Combine the samples into 1 data.frame for column annotation
+combinedAnnot_zebMousefAD <- samples_zeb$age_24mths%>%
+  bind_rows(samples_mouse2$age_11mths) %>%
+  dplyr::rename(Group = genotype,
+                Dataset = age) %>%
+  dplyr::mutate(Dataset = case_when(
+    Dataset == 11 ~ "Mouse",
+    Dataset == 24 ~ "Zebrafish"
+  )) %>%
+  bind_rows(samples_fad2)%>%
+  mutate(Group = as.factor(Group)) %>%
+  dplyr::select(-Dataset) %>%
+  column_to_rownames("Sample")
+
+# Combine the PC1 values of the datasets
+combinedPC1_zebMousefAD <- rbind(scaled_pc1_zeb$age_24mths, 
+                     scaled_pc1_mouse2$age_11mths,
+                     scaled_pc1_fad) 
+
+# Ensure ordering of samples is consistent and that only 
+# genesets which are significant in at least one (zeb or mouse) 
+# are included for plotting. 
+combinedPC1_zebMousefAD <- combinedPC1_zebMousefAD%>%
+  magrittr::extract(rownames(combinedAnnot_zebMousefAD), genesets_zm$Geneset)
+# rownames(combinedPC1_zebMousefAD) == rownames(combinedAnnot_zebMousefAD)
+
+# Formatting the names of gene sets a bit. 
+colnames(combinedPC1_zebMousefAD) %<>%
+  gsub(x = ., pattern = "HALLMARK_", replacement = "")
+colnames(combinedPC1_zebMousefAD) %<>%
+  gsub(x = ., pattern = "_", replacement = " ")
+
+# Row (geneset) annotation 
+genesetAnnotation = genesets_zm %>%
+  dplyr::select(Geneset, sig_zeb, sig_mouse) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, pattern = "HALLMARK_",
+                               replacement = ""),
+                Geneset = gsub(x= Geneset, pattern = "_",
+                               replacement = " "))%>%
+  dplyr::mutate(sig_zeb = as.character(as.numeric(sig_zeb)),
+                sig_mouse = as.character(as.numeric(sig_mouse))) %>%
+  column_to_rownames("Geneset") 
+
+# Change colours of annotations
+colourAnnotation = list(
+    #Dataset = c(fAD = "Pink", Mouse = "PaleTurquoise", Zebrafish = "Gold"),
+    sig_zeb = c("0" = "#dddddd", "1" = "#a86dc2"),
+    sig_mouse = c("0"= "#dddddd", "1" = "#a86dc2"),
+    Group = c(wt = "#dddddd", control = "#dddddd", 
+              "5XFAD" = "OrangeRed", "q96" = "OrangeRed",
+              eoAD = "OrangeRed", eoAD_psen1 = "Orange")
+)
+
+# Plot the heatmap
+combinedHeatmap_zebMousefAD <- pheatmap(combinedPC1_zebMousefAD%>%t,
+         color = palette,
+         cluster_cols = FALSE,
+         cellwidth = 10,
+         cellheight = 10,
+         gaps_col = c(4,8,8,8,14,14,14,11, 21),
+         border_color = "white",
+         annotation_col = combinedAnnot_zebMousefAD,
+         annotation_row = genesetAnnotation,
+         annotation_colors = colourAnnotation,
+         scale="none"
+)
+
+save_pheatmap_pdf(combinedHeatmap_zebMousefAD, 
+                  here("data", "PC1", "fig",
+                       "combinedHeatmap_zebMousefAD.pdf"),
+                  width = 11)
+```
+
+
+### 3.3. Within Human sAD dataset
+
+- Which gene sets are significant across all Clusters 1-6 of the 
+Mayo Clinic sAD dataset?
+
+- We will exclude Cluster 4 as there is only one AD sample in that cluster. 
+
+```{r}
+samples_mayo$Group %<>% droplevels
+samples_mayo2 <- samples_mayo %>% dplyr::filter(Cluster != 4)
+
+scaled_pc1_mayo2 <- scaled_pc1_mayo[samples_mayo2$Sample,]
+
+results_mayo <- scaled_pc1_mayo2 %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_mayo2, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Group", "Cluster")) %>%
+  split(.$variable)%>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ Group + (1|Cluster))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "GroupAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+```
+
+### 3.4. Between Human fAD and selected clusters from Human sAD?
+
+- To do this, we need to separate the fAD PC1 values into AD and controls, 
+and each of these groups will be compared to the sAD clusters. 
+
+```{r}
+clusters <- readRDS(here("data", "datasets", "mayo", "clusters_km.rds"))
+mayo_clusters_samples <- samples_mayo %>% 
+  dplyr::filter(Diagnosis %in% c("AD", "Control"),
+                               Tissue == "TemporalCortex") %>%
+  left_join(clusters, by = c("SampleID"="Sample"))  %>%
+  dplyr::select(SampleID, Diagnosis, Cluster)%>%
+  dplyr::rename(Sample = SampleID)%>%
+  dplyr::arrange(Cluster, Diagnosis)%>%
+  dplyr::mutate(Cluster = as.factor(as.character(Cluster)))
+
+samples_fad_ctrl <- samples_fad %>% 
+  dplyr::filter(group == "control")%>%
+  dplyr::mutate(Cluster = "6") %>%
+  dplyr::mutate(Cluster = as.factor(Cluster),
+                group = gsub(x = group, pattern = "control", 
+                             replacement = "Control")) %>%
+  dplyr::rename(Diagnosis = group) %>%
+  dplyr::select(Sample, Diagnosis, Cluster)
+
+samples_fad_eoad <- samples_fad %>%
+  dplyr::filter(group != "control") %>%
+  dplyr::mutate(Cluster = "7")%>%
+  dplyr::mutate(Cluster = as.factor(Cluster),
+                group = gsub(x = group, 
+                             pattern = "_psen1|eo", 
+                             replacement = "")) %>%
+  dplyr::rename(Diagnosis = group)%>%
+  dplyr::select(Sample, Diagnosis, Cluster)
+
+```
+
+- fAD AD and all clusters in sAD
+
+```{r}
+pc1_fADandsAD <- rbind(scaled_pc1_fad, 
+                       scaled_pc1_mayo)
+
+# combine samples into 1 data.frame
+samples_fADAndsAD <- samples_fad %>%
+  dplyr::mutate(Cluster ="6 (fAD)") %>%
+  dplyr::mutate(Cluster = as.factor(Cluster),
+                group = gsub(x = group, pattern = "control", 
+                             replacement = "Control"),
+                group = gsub(x = group, 
+                             pattern = "_psen1|eo", 
+                             replacement = "")) %>%
+  dplyr::rename(Diagnosis = group) %>%
+  dplyr::select(Sample, Diagnosis, Cluster) %>%
+  bind_rows(mayo_clusters_samples)%>%
+  dplyr::mutate(Dataset = c(rep("fad", 21),
+                            rep("mayo", 132))) 
+samples_fADAndsAD$Diagnosis %<>% as.factor %>% relevel("Control")
+
+pca_fADAndsAD <- pc1_fADandsAD %>% prcomp()
+summary(pca_fADAndsAD) #PC1 75.64% PC2 10.5%
+
+pca_fADandsADPlot <- pca_fADAndsAD$x %>% 
+  as.data.frame %>%
+  rownames_to_column("Sample") %>% 
+  dplyr::select(Sample, PC1, PC2)%>%
+  left_join(samples_fADAndsAD)%>%
+  ggplot(aes(x = PC1, y = PC2, colour = Cluster, shape = Diagnosis)) +
+  geom_point(size = 3, alpha = 0.6)+
+  scale_shape_manual(values = c(1,16))+
+  labs(x = "Principal Component 1 (75.6%)",
+       y = "Principal Component 2 (10.5%)")+
+  theme(aspect.ratio = 1)
+
+export::graph2pdf(pca_fADandsADPlot, here("data", "PC1", "pca_fADsAD.pdf"))
+```
+
+```{r}
+mds_fADandsAD  <- pc1_fADandsAD %>% dist %>%
+  isoMDS( k = 2)
+
+mds_fADandsAD$points %>% as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "PC1", "PC2")) %>%
+  dplyr::select(Sample, PC1, PC2) %>%
+  left_join(samples_fADAndsAD)%>%
+  ggplot(aes(x = PC1, y = PC2, colour = Cluster, shape = Diagnosis)) +
+  geom_point(size = 3, alpha = 0.6)+
+  scale_shape_manual(values = c(1,16))+
+  labs(x = "Principal Component 1 (75.6%)",
+       y = "Principal Component 2 (10.5%)")
+
+```
+
+- Heatmap for the figure
+
+```{r}
+# combine pc1 values into 1 data.frame
+pc1_fADandsAD <- rbind(scaled_pc1_fad[samples_fad_eoad$Sample,], 
+                       scaled_pc1_mayo)
+
+# combine samples into 1 data.frame
+samples_fADAndsAD <- samples_fad_eoad %>%
+  bind_rows(mayo_clusters_samples)%>%
+  dplyr::mutate(Dataset = c(rep("fad", 14),
+                            rep("mayo", 132))) 
+samples_fADAndsAD$Diagnosis %<>% as.factor %>% relevel("Control")
+
+#Test significance
+results_fADandsAD <- pc1_fADandsAD%>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_fADAndsAD, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Diagnosis", "Cluster", "Dataset")) %>%
+  split(.$variable)%>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ (1|Cluster))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "DiagnosisAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+
+results_mouseAndfAD2 <-  pc1_mouseAndfAD2%>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_mouseAndfAD2, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Group", "Dataset")) %>%
+  split(.$variable) %>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ Group + (1|Dataset))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "GroupAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+```
+
+
+```{r eval=FALSE}
+# Combine pc1 values into 1 data.frame
+pc1_mouseAndfAD2 <- rbind(scaled_pc1_mouse1$age_12mths,
+                       scaled_pc1_fad)
+
+# Combine samples into 1 data.frame
+samples_mouseAndfAD2 <- samples_mouse1$age_12mths %>%
+  dplyr::mutate(Group = case_when(
+    genotype == "wt" ~ "control",
+    genotype == "5XFAD" ~ "AD"
+  )) %>%
+  dplyr::select(-age, -genotype) %>%
+  bind_rows(samples_fad[, c("Sample", "Group")])%>%
+  dplyr::mutate(Group = gsub(x = Group,
+                             pattern = "eoAD|eoAD_psen1",
+                             replacement = "AD"))%>%
+  dplyr::mutate(Dataset = c(rep("mouse1", 5),
+                            rep("fad", 21)))
+samples_mouseAndfAD2$Group %<>% as.factor %>% relevel("control")
+  
+# Test significance of AD vs control for each gene set within each 
+# dataset
+results_mouseAndfAD2 <-  pc1_mouseAndfAD2%>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples_mouseAndfAD2, by = "Sample") %>%
+  melt(id.vars = c("Sample", "Group", "Dataset")) %>%
+  split(.$variable) %>%
+  lapply(function(x){
+    x %>%
+      with(lmer(value ~ Group + (1|Dataset))) %>%
+      summary %>%
+      coef %>%
+      as.data.frame %>%
+      rownames_to_column("coef") %>%
+      as_tibble
+  }) %>% bind_rows(.id = "Geneset")%>% 
+  dplyr::filter(coef == "GroupAD") %>%
+  dplyr::rename(p = `Pr(>|t|)`) %>%
+  dplyr::mutate(adj_p = p.adjust(p, "bonferroni"),
+                sig = adj_p < 0.05) %>% 
+  dplyr::arrange(p) 
+```
+
+
+

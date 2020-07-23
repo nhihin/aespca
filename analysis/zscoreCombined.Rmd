@@ -1,0 +1,259 @@
+---
+title: "zscoreCombined"
+author: "Nhi Hin"
+date: "2020-06-17"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+```
+
+
+## Introduction
+
+- Aim here is to project all datasets together. 
+- We will do an initial test with only the human datasets.
+
+## 1. Import data
+
+- Import the PC1 values from PathwayPCA for all datasets.
+
+```{r}
+# Antonell et al. dataset
+samples_fAD <- readRDS(here("data", "datasets", "fad", "samples.rds"))
+pc1_fAD <- readRDS(here("data", "datasets", 
+                                "fad", "PC1_allSamples.rds"))
+
+# Mayo Clinic RNA-seq (sporadic) AD dataset
+samples_mayo <- readRDS(here("data", "datasets", "mayo", 
+                                 "heatmapAnnot.rds"))
+pc1_mayo <- readRDS(here("data", "datasets", "mayo", 
+                               "PC1_TCsamples.rds"))
+```
+
+- The ordering of the samples (columns) in the PC1 tables needs to adjusted 
+so that samples are ordered according to their condition/diagnosis. 
+
+```{r}
+samples_fAD %<>% dplyr::arrange(hasAD, group, apoe) %>%
+  dplyr::mutate(Cluster = 6)
+pc1_fAD %<>% magrittr::extract(samples_fAD$Sample,)
+
+samples_mayo %<>% rownames_to_column("Sample") %>%
+  dplyr::mutate(Diagnosis = gsub(x=Diagnosis,
+                                 pattern = "Control",
+                                 replacement = "control")) %>%
+  dplyr::arrange(Cluster, Diagnosis, ApoE)
+pc1_mayo %<>% magrittr::extract(samples_mayo$Sample,)
+```
+
+
+## 2. Scale Data
+
+- All datasets will be standardised (mean removal and variance scaling) 
+within each dataset. 
+
+```{r}
+# zscore <- function(x){
+#   x <- (x-mean(x))/sd(x)
+# }
+
+# Dataset specific mean and standard dev.
+mean(as.matrix(pc1_fAD))
+sd(as.matrix(pc1_fAD))
+
+scaleData <- function(x){
+  x <- as.matrix(x)
+  mean <- mean(x)
+  sd <- sd(x)
+  
+  scaled_x <- (x-mean)/sd
+  return(scaled_x)
+}
+
+scaled_pc1_fAD <- pc1_fAD %>%
+  scaleData %>%
+  set_rownames(rownames(pc1_fAD)) 
+
+scaled_pc1_mayo <- pc1_mayo %>%
+  scaleData %>%
+  set_rownames(rownames(pc1_mayo))
+
+# scaled_pc1_fAD <- pc1_fAD %>%
+#   sapply(zscore) %>%
+#   set_rownames(rownames(pc1_fAD))
+# 
+# scaled_pc1_mayo <- pc1_mayo %>%
+#   sapply(zscore) %>%
+#   set_rownames(rownames(pc1_mayo))
+
+
+
+```
+
+
+## 3. Initial heatmap
+
+- To create a heatmap, we need the combined PC1 data as well as a 
+combined annotation. 
+
+```{r}
+combinedAnnot <- samples_fAD %>%
+  dplyr::select(Sample, Cluster, group, apoe, age) %>%
+  dplyr::rename(Diagnosis = group,
+                ApoE = apoe,
+                AgeAtDeath = age) %>%
+  dplyr::mutate(apoe = gsub(x =ApoE,
+                            pattern = "_",
+                            replacement = "")) %>%
+  dplyr::select(Sample, Cluster, Diagnosis, AgeAtDeath, ApoE) %>%
+  bind_rows(samples_mayo) %>%
+  dplyr::mutate(Diagnosis = as.factor(Diagnosis)) %>%
+  column_to_rownames("Sample")
+
+combinedPC1 <- rbind(scaled_pc1_fAD, scaled_pc1_mayo) %>%
+  magrittr::extract(rownames(combinedAnnot),)
+colnames(combinedPC1) %<>% 
+  gsub(x = ., pattern = "HALLMARK_", replacement = "") %>%
+  gsub(x = ., pattern = "_", replacement = " ")
+
+#pheatmap(pc1_fAD, color = palette, scale="none")
+
+combinedHeatmap <- pheatmap(combinedPC1%>%t,
+         color = palette,
+         cluster_cols = FALSE,
+         annotation_col = combinedAnnot,
+         scale="none"
+)
+
+# save_pheatmap_pdf(combinedHeatmap, here("data", "PC1", "fig",
+#                                         "fADsADheatmap.pdf"),
+#                   width = 15, height = 12)
+```
+
+## 4. Zebrafish and Mouse Data
+
+- Import in PC1 values
+
+```{r}
+# Zebrafish data
+pc1_zeb <- readRDS(here("data", "datasets", "zebrafish", 
+                                "PC1.rds"))
+
+# Mouse dataset 1
+pc1_mouse1<- readRDS(here("data", "datasets", 
+                          "mouse", "GSE140286", "PC1.rds"))
+rownames(pc1_mouse1) <- gsub(x = rownames(pc1_mouse1),
+                             pattern = "^(.*)$",
+                             replacement = "\\1_D1")
+
+# Mouse dataset 2
+pc1_mouse2 <- readRDS(here("data", "datasets", "mouse", 
+                                "GSE142633", "PC1.rds"))
+rownames(pc1_mouse2) <- gsub(x = rownames(pc1_mouse2),
+                             pattern = "^(.*)$",
+                             replacement = "\\1_D2")
+```
+
+- Sample Information can be extracted from previously saved DGEList objects.
+
+```{r}
+samples_zeb <- readRDS(here("data", "datasets", "zebrafish", 
+                        "dge.rds"))$samples
+
+samples_mouse1 <- readRDS(here("data", "datasets", "mouse", 
+                        "GSE140286", "dge.rds"))$samples
+
+samples_mouse2 <- readRDS(here("data", "datasets", "mouse", 
+                        "GSE142633", "dge.rds"))$samples
+```
+
+- The ordering of samples needs to be adjusted so they are ordered 
+according to their condition. 
+
+```{r}
+samples_zeb %<>% rownames_to_column("Sample") %>%
+  dplyr::arrange(Age, Hypoxia, Genotype)%>%
+  dplyr::filter(Hypoxia==0)
+  
+pc1_zeb %<>% magrittr::extract(samples_zeb$Sample,) 
+
+samples_mouse1 %<>% rownames_to_column("Sample") %>%
+  dplyr::arrange(age, genotype)%>%
+  dplyr::mutate(Sample = paste0(Sample, "_D1"))
+pc1_mouse1 %<>% magrittr::extract(samples_mouse1$Sample,)
+
+samples_mouse2 %<>% rownames_to_column("Sample") %>%
+  dplyr::arrange(age, genotype) %>%
+  dplyr::mutate(Sample = paste0(Sample, "_D2"))
+pc1_mouse2 %<>% magrittr::extract(samples_mouse2$Sample,)
+```
+
+- Scale data
+
+```{r}
+scaled_pc1_zeb <- pc1_zeb[1:8,] %>%
+  scaleData %>%
+  rbind(scaleData(pc1_zeb[9:16,])) %>%
+  set_rownames(rownames(pc1_zeb))
+
+scaled_pc1_mouse1 <- pc1_mouse1 %>%
+  scaleData %>%
+  set_rownames(rownames(pc1_mouse1))
+
+scaled_pc1_mouse2 <- pc1_mouse2 %>%
+  scaleData %>%
+  set_rownames(rownames(pc1_mouse2))
+```
+
+- Combined heatmap 
+
+```{r}
+combinedAnnot2 <- samples_zeb %>%
+  dplyr::select(Sample, Age, Genotype) %>%
+  dplyr::rename(age = Age, 
+                genotype = Genotype) %>%
+  dplyr::mutate(age = as.numeric(as.character(age)),
+                genotype=gsub(x=genotype, 
+                              pattern="wt",
+                              replacement = "WT")) %>%
+  bind_rows(samples_mouse1[, c("Sample", "age", "genotype")],
+            samples_mouse2[, c("Sample","age", "genotype")]%>%
+              dplyr::mutate(age=as.numeric(as.character(age))),
+              .id = "Dataset") %>%
+  dplyr::mutate(Dataset = as.numeric(as.character(Dataset)),
+                age = as.numeric(as.character(age)),
+                genotype = as.character(genotype))%>%
+    column_to_rownames("Sample")
+  
+
+combinedPC12 <- rbind(scaled_pc1_zeb, scaled_pc1_mouse1, scaled_pc1_mouse2)
+
+combinedHeatmap3 <- pheatmap(combinedPC12%>%t,
+         color = palette,
+         cluster_cols = FALSE,
+         gaps_col = c(16, 16, 16, 31,31,31,
+                      8, 20,26,37),
+         annotation_col = combinedAnnot2,
+         scale="none"
+)
+
+save_pheatmap_pdf(combinedHeatmap3, here("data", "PC1", "fig",
+                                        "zebrafishMouseHeatmap.pdf"),
+                  width = 15, height = 12)
+```
+
+

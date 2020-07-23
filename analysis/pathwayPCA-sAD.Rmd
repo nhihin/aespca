@@ -19,6 +19,7 @@ library(dplyr)
 library(Rtsne)
 library(tibble)
 library(pheatmap)
+library(stats)
 library(cluster)
 theme_set(theme_bw())
 
@@ -30,6 +31,8 @@ save_pheatmap_pdf <- function(x, filename, width=8, height=11) {
    grid::grid.draw(x$gtable)
    dev.off()
 }
+
+set.seed(123)
 ```
 
 
@@ -43,6 +46,7 @@ collection .gmt file from MSigDB (v.7.0). The entrezgene IDs were converted
 to Ensembl human IDs using homologous genes from BioMart. 
 
 ```{r}
+# Hallmark Gene set collection 
 hallmarkGenes <- readRDS(here("data", "genesets", "human",
                               "ens_h_mapped.rds"))
 hallmarkNames <- names(hallmarkGenes)
@@ -50,6 +54,13 @@ hallmarkNames <- names(hallmarkGenes)
 hallmarkCol <- CreatePathwayCollection(
   sets_ls = hallmarkGenes,
   TERMS = hallmarkNames
+)
+
+# IRE gene sets
+ireGenes <- readRDS(here("data", "ireGenes", "human", "ireGenes.rds"))
+ireNames <- names(ireGenes)
+ireCol <- CreatePathwayCollection(
+  sets_ls = ireGenes, TERMS = ireNames
 )
 ```
 
@@ -60,7 +71,7 @@ hallmarkCol <- CreatePathwayCollection(
 
 ```{r}
 exprs <- readRDS(here("data", "datasets", "mayo", 
-                      "dge.rds")) %>%
+                     "dge.rds")) %>%
   cpm(log=TRUE)
 
 samples <- readRDS(here("data", "datasets", "mayo", 
@@ -75,6 +86,7 @@ tidyDat <- exprs %>%
 
 tidyDat[1:5, 1:20]  # preview
 ```
+
 
 - Subsetting data
 
@@ -139,6 +151,15 @@ omics_genotype_t <- CreateOmics(
   response = samples_genotype_t,
   respType = "categ"
 )
+# Create another one for the IRE sets
+omics_genotype_t_ire <- CreateOmics(
+  assayData_df = tidyDat_t,
+  pathwayCollection_ls = ireCol,
+  response = samples_genotype_t,
+  respType = "categ"
+)
+omics_genotype_t_ire %>% saveRDS(here("data","datasets", "mayo", 
+                                      "omics_genotype_t_ire.rds"))
 
 # Perform enrichment testing using AES-PCA
 test_genotype_t <- AESPCA_pVals(
@@ -150,9 +171,23 @@ test_genotype_t <- AESPCA_pVals(
   adjustpValues = TRUE,
   adjustment = c("Holm", "BH")
 )
+# And for IRE
+# AESPCA_pVals(
+#   object = omics_genotype_t_ire,
+#   numReps = 0,
+#   numPCs = 2,
+#   parallel = TRUE,
+#   numCores = 8,
+#   adjustpValues = TRUE,
+#   adjustment = c("Holm", "BH")
+# )%>% saveRDS("./test_genotype_t_ire.rds")
+test_genotype_t_ire <- readRDS(here("data", "datasets", "mayo",
+                                    "test_genotype_t_ire.rds"))
 
 # Top ranked enriched gene sets 
 test_genotype_t$pVals_df 
+test_genotype_t_ire$pVals_df
+
 
 # Which gene sets are significant?
 sigSets_t <- test_genotype_t$pVals_df %>%
@@ -160,6 +195,7 @@ sigSets_t <- test_genotype_t$pVals_df %>%
 
 sigSets_t
 ```
+
 
 - **Cerebellum**
 
@@ -195,29 +231,69 @@ sigSets_c
 
 ### 5. Plots
 
-- To initially get an idea of the differences in sample-specific geneset 
-activity between cerebellum and temporal cortex samples, we will plot 
-just one gene set below (**Oxidative Phosphorylation**). 
-
-- We can see that while there is a lot of variation between different 
-samples reflecting the heterogeneity of the dataset and the patients, 
-there does appear to be a shift of AD patients having lower gene set 
-activity compared to controls. This effect seems to be slightly more 
-pronounced in the TC compared to cerebellum. 
+- Violin plot of the IRE gene sets
 
 ```{r}
-test_genotype_t$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>% 
-  set_rownames(attributes(test_genotype_t$PCs_ls)$sampleIDs) %>%
-  rownames_to_column("Sample") %>%
+
+ire_comparisons <- list(c("Control", "AD"))
+violin_ire_plot <- test_genotype_t_ire$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "geneset") %>%
   left_join(samples, by = "Sample") %>%
-  ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
-  geom_histogram(bins = 20, position = "identity", alpha=0.5) +
-  labs(x = "PC1 value for each sample",
-       y = "Count", 
-       fill = "Has AD?") +
-  scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
-  scale_colour_manual(values = c("black", "yellow"))+
-  ggtitle("Temporal Cortex: Oxidative Phosphorylation")
+  ggpubr::ggviolin(x = "Diagnosis", y = "V1",
+                    fill = "Diagnosis", add = "boxplot",
+                   add.params = list(fill = "white"),
+                   palette = c("#dddddd", "orangered")) +
+  ggpubr::stat_compare_means(comparisons = ire_comparisons)+
+  #ggpubr::stat_compare_means()  +
+  facet_wrap(~geneset, scales = "free_y") +
+  labs(y = "PC1 Value")
+
+violin_ire_plot %>% export::graph2pdf(here("data", "datasets", 
+                                           "mayo", "fig", "violin_ire_plot.pdf"))
+
+# test_genotype_t_ire$PCs_ls$ire3_all %>% 
+#   set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
+#   rownames_to_column("Sample") %>%
+#   left_join(samples, by = "Sample") %>%
+#   ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
+#   geom_histogram(bins = 20, position = "identity", alpha=0.5) +
+#   labs(x = "PC1 value for each sample",
+#        y = "Count", 
+#        fill = "Has AD?") +
+#   scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+#   scale_colour_manual(values = c("black", "yellow"))+
+#   ggtitle("Temporal Cortex: 3' IREs")
+# 
+# test_genotype_t_ire$PCs_ls$ire5_all %>% 
+#   set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
+#   rownames_to_column("Sample") %>%
+#   left_join(samples, by = "Sample") %>%
+#   ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
+#   geom_histogram(bins = 20, position = "identity", alpha=0.5) +
+#   labs(x = "PC1 value for each sample",
+#        y = "Count", 
+#        fill = "Has AD?") +
+#   scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+#   scale_colour_manual(values = c("black", "yellow"))+
+#   ggtitle("Temporal Cortex: 5' IREs")
+# 
+# test_genotype_t_ire$PCs_ls$ire3_hq %>% 
+#   set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
+#   rownames_to_column("Sample") %>%
+#   left_join(samples, by = "Sample") %>%
+#   ggplot(aes(x = Diagnosis, y = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
+#   geom_boxplot() +
+#   #geom_histogram(bins = 20, position = "identity", alpha=0.5) +
+#   labs(x = "PC1 value for each sample",
+#        y = "Count", 
+#        fill = "Has AD?") +
+#   scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
+#   scale_colour_manual(values = c("black", "yellow"))+
+#   ggtitle("Temporal Cortex: High quality 3' IREs")
 ```
 
 ```{r}
@@ -350,7 +426,6 @@ PCAplot_TCsamples <- PCA_TCsamples$x %>%
          colour = "Diagnosis", shape = "ApoE\nGenotype") 
 
 PCAplot_TCsamples
-
 ```
 
 - From the normal PCA it doesn't look like the AD patients have 
@@ -405,22 +480,19 @@ heterogeneity within the control samples.
 
 #### 6.2. t-SNE
 
-- t-SNE is a dimension reduction method that can be used to visualise 
-structure within samples similar to PCA. However, while PCA is linear, 
-t-SNE is non-linear. We will try this to see if we can see better 
-separation of samples. 
+- Sometimes t-SNE can work better than PCA for visualising groups within a 
+dataset, as it is non-linear while PCA works better for linearly separable 
+data. 
+ 
+- As t-SNE is influenced by parameter choice, we will try various values. 
+Typically, the perplexity ranges from 5 to 50 depending on the size of 
+the dataset, with larger values favouring a more global view and 
+smaller values favouring more local structure. 
 
-- t-SNE is influenced greatly by parameter choice, particularly the 
-perplexity, which is usually a value < 50. Here we will try several 
-to see which might work better for the data. 
+```{r }
 
-- Note: Higher perplexity means more global structure, lower perplexity 
-to prioritise more local structure.
-
-
-```{r eval=FALSE}
 tsne_TCsamples <- list()
-perplexitiesToTest <- c(5, 10, 20, 30, 40)
+perplexitiesToTest <- c(5, 10, 20)
 
 for(n in perplexitiesToTest){
   tsne_TCsamples[[n]] <-  Rtsne(PC1_TCsamples, 
@@ -430,16 +502,246 @@ for(n in perplexitiesToTest){
                         theta = 0,
                         max_iter = 1e5)
 }
-tsne_TCsamples %>% saveRDS(here("data", "datasets", "mayo",
-                                "tsne_TCsamples.rds"))
+
+```
+
+- We will plot the different t-SNEs below. 
+
+```{r}
+# tsne_TCsamples <- readRDS(here("data", "datasets", "mayo",
+#                                 "tsne_TCsamples.rds"))
+
+# 5 distinct clusters, although there are AD and controls within each
+tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+# 4-5 main groupings, some separation of AD and controls 
+tsne_TCsamples[[10]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+# This is probably too high of a value as it is mainly the global 
+# structure. One main blob
+tsne_TCsamples[[20]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
 
 
 ```
 
-```{r}
+- Based on the t-SNEs we will try clustering the PC1 values into 4-5 
+clusters.
 
-tsne_TCsamples <- readRDS(here("data", "datasets", "mayo",
-                                "tsne_TCsamples.rds"))
+- We will use a clustering method
+
+```{r}
+clusters_km <- tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>% 
+  kmeans(centers = 5) %>%
+  .$cluster %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+
+clusters_hier <- PC1_TCsamples %>%
+  dist(method = "euclidean") %>%
+  hclust(method = "ward.D2")%>%
+  cutree(k = 5) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+
+clusters_hier2 <- PC1_TCsamples %>%
+  dist(method = "euclidean") %>%
+  hclust(method = "ward.D")%>%
+  cutree(k = 6) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+```
+
+- Plot the clusters on the t-SNE
+
+```{r}
+tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  left_join(clusters_km) %>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis,
+             shape = ApoE)) +
+  geom_point(size = 5, alpha=0.3, colour = clusters_km$Cluster) +
+  geom_point(alpha = 0.8,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  left_join(clusters_hier) %>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis,
+             shape = ApoE)) +
+  geom_point(size = 5, alpha=0.3, colour = clusters_hier$Cluster) +
+  geom_point(alpha = 0.8,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+```
+
+- Try clustering on the t-SNE directly
+
+```{r}
+clusters_tsne_km <- tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  as.matrix %>%
+  kmeans(centers = 5) %>%
+  .$cluster%>%
+  as.data.frame() %>% 
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+
+tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  left_join(clusters_tsne_km) %>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis,
+             shape = ApoE)) +
+  geom_point(size = 5, alpha=0.3, colour = clusters_tsne_km$Cluster) +
+  geom_point(alpha = 0.8,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+```
+
+- Heatmap (works well with just the hierarchical clustering)
+
+```{r}
+heatmapplot <- PC1_TCsamples %>% 
+  rownames_to_column("Sample") %>% 
+  left_join(clusters_km) %>%
+  left_join(samples[, c("Sample", "Diagnosis")], by = "Sample")%>%
+  dplyr::arrange(Cluster, Diagnosis) %>%
+  dplyr::select(-Cluster, -Diagnosis) %>%
+  column_to_rownames("Sample") %>% t 
+
+rownames(heatmapplot) <- gsub(x = rownames(heatmapplot),
+                              pattern = "HALLMARK_",
+                              replacement = "") 
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+heatmapAnnot <- clusters_km%>% as.data.frame%>%
+  set_rownames(.$Sample) %>%
+  magrittr::extract(colnames(heatmapplot),) %>%
+  rownames_to_column("Sample2") %>%
+  dplyr::select(-Sample) %>%
+  dplyr::rename(Sample = Sample2) %>%
+  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")]) %>%
+  column_to_rownames("Sample") 
+
+plotHeatmap <- pheatmap::pheatmap(heatmapplot, 
+                   cluster_cols = FALSE,
+                   scale = "row",
+                   color = palette,
+                   annotation_col = heatmapAnnot)
+
+heatmapAnnot %>% saveRDS(here("data", "datasets", "mayo","heatmapAnnot.rds"))
+```
+
+
+
+```{r eval=FALSE}
+
 
 
 tsne_TCsamples[[5]]$Y %>%
@@ -472,128 +774,123 @@ testclust <- tsne_TCsamples[[5]]$Y %>%
   set_rownames(rownames(PC1_TCsamples)) %>%
   as.matrix %>%
   kmeans(centers = 5) 
+
 testclust2 <- testclust$cluster%>%
   as.data.frame() %>% 
   rownames_to_column("Sample") %>%
   set_colnames(c("Sample", "Cluster"))
 
-heatmapplot <- PC1_TCsamples %>% 
-  rownames_to_column("Sample") %>% 
-  left_join(testclust2) %>%
-  left_join(samples[, c("Sample", "Diagnosis")], by = "Sample")%>%
-  dplyr::arrange(Cluster, Diagnosis) %>%
-  dplyr::select(-Cluster, -Diagnosis) %>%
-  column_to_rownames("Sample") %>% t 
 
-rownames(heatmapplot) <- gsub(x = rownames(heatmapplot),
-                              pattern = "HALLMARK_",
-                              replacement = "") 
-
-heatmapAnnot <- testclust2%>% as.data.frame%>%
-  set_rownames(.$Sample) %>%
-  magrittr::extract(colnames(heatmapplot),) %>%
-  rownames_to_column("Sample2") %>%
-  dplyr::select(-Sample) %>%
-  dplyr::rename(Sample = Sample2) %>%
-  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")]) %>%
-  column_to_rownames("Sample") 
-
-plotHeatmap <- pheatmap::pheatmap(heatmapplot, 
-                   cluster_cols = FALSE,
-                   scale = "row",
-                   color = palette,
-                   annotation_col = heatmapAnnot)
-
-# save_pheatmap_pdf(plotHeatmap, width = 11, height = 11, 
-#                   filename = here("data", "datasets", "mayo",
-#                                   "fig", "clusterHeatmap.pdf"))
 
 ```
 
+## Association between ApoE and Cluster
+
+- Not really an association between ApoE and cluster. 
 
 ```{r}
-tsne_TCsamples[[10]]$Y %>%
-  as.data.frame %>%
-  set_colnames(c("Dim1", "Dim2")) %>%
-  set_rownames(rownames(PC1_TCsamples)) %>%
-  rownames_to_column("Sample") %>%
-  left_join(samples[, c("Sample",
-                        "Sex",
-                        "AgeAtDeath",
-                        "ApoE",
-                        "Diagnosis")], by = "Sample")%>%
-  ggplot(aes(x=Dim1, y = Dim2, 
-             colour = Diagnosis, 
-             shape = ApoE)) +
-  geom_point(alpha = 0.6,size=3) +
-  scale_shape_manual(values = c(15,16,17,18,8)) +
-  scale_colour_manual(values = c("#999999", "orangered")) +
-  theme(aspect.ratio = 1) +
-    labs(x = "Dim 1",
-         y = "Dim 2", 
-         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+conting <- samples %>%
+  dplyr::filter(Tissue == "TemporalCortex", Diagnosis %in% c("AD", "Control")) %>%
+  left_join(clusters_km, by = "Sample")%>%
+  dplyr::group_by(Cluster, ApoE) %>%
+  dplyr::summarise(n = n()) %>%
+  ungroup() %>%
+  dplyr::mutate(Cluster = as.factor(as.character(Cluster)),
+                ApoE = as.factor(as.character(ApoE))) %>% 
+  dcast(Cluster ~ ApoE, value.var = "n")
 
-tsne_TCsamples[[20]]$Y %>%
-  as.data.frame %>%
-  set_colnames(c("Dim1", "Dim2")) %>%
-  set_rownames(rownames(PC1_TCsamples)) %>%
-  rownames_to_column("Sample") %>%
-  left_join(samples[, c("Sample",
-                        "Sex",
-                        "AgeAtDeath",
-                        "ApoE",
-                        "Diagnosis")], by = "Sample")%>%
-  ggplot(aes(x=Dim1, y = Dim2, 
-             colour = Diagnosis, 
-             shape = ApoE)) +
-  geom_point(alpha = 0.6,size=3) +
-  scale_shape_manual(values = c(15,16,17,18,8)) +
-  scale_colour_manual(values = c("#999999", "orangered")) +
-  theme(aspect.ratio = 1) +
-    labs(x = "Dim 1",
-         y = "Dim 2", 
-         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+# conting <- samples_mayo %>%
+#   left_join(mayo_samples[, c("SampleID", "AgeAtDeath", "ApoE")], 
+#             by = c("Sample"="SampleID")) %>% 
+#   dplyr::group_by(Cluster,ApoE) %>%
+#   dplyr::summarise(n = n())%>%
+#   ungroup() %>%
+#   dplyr::mutate(Cluster = as.factor(as.character(Cluster)),
+#                 ApoE = as.factor(as.character(ApoE))) %>% 
+#   dcast(Cluster ~ ApoE, value.var = "n")
 
-tsne_TCsamples[[30]]$Y %>%
-  as.data.frame %>%
-  set_colnames(c("Dim1", "Dim2")) %>%
-  set_rownames(rownames(PC1_TCsamples)) %>%
-  rownames_to_column("Sample") %>%
-  left_join(samples[, c("Sample",
-                        "Sex",
-                        "AgeAtDeath",
-                        "ApoE",
-                        "Diagnosis")], by = "Sample")%>%
-  ggplot(aes(x=Dim1, y = Dim2, 
-             colour = Diagnosis, 
-             shape = ApoE)) +
-  geom_point(alpha = 0.6,size=3) +
-  scale_shape_manual(values = c(15,16,17,18,8)) +
-  scale_colour_manual(values = c("#999999", "orangered")) +
-  theme(aspect.ratio = 1) +
-    labs(x = "Dim 1",
-         y = "Dim 2", 
-         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+conting[is.na(conting)] <- 0
 
-tsne_TCsamples[[40]]$Y %>%
-  as.data.frame %>%
-  set_colnames(c("Dim1", "Dim2")) %>%
-  set_rownames(rownames(PC1_TCsamples)) %>%
-  rownames_to_column("Sample") %>%
-  left_join(samples[, c("Sample",
-                        "Sex",
-                        "AgeAtDeath",
-                        "ApoE",
-                        "Diagnosis")], by = "Sample")%>%
-  ggplot(aes(x=Dim1, y = Dim2, 
-             colour = Diagnosis, 
-             shape = ApoE)) +
-  geom_point(alpha = 0.6,size=3) +
-  scale_shape_manual(values = c(15,16,17,18,8)) +
-  scale_colour_manual(values = c("#999999", "orangered")) +
-  theme(aspect.ratio = 1) +
-    labs(x = "Dim 1",
-         y = "Dim 2", 
-         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+# conting2 <- conting %>% 
+#   mutate(Allele2 = `23` + `24`,
+#          Allele3 = `23` + `33` + `34`,
+#          Allele4 = `34` + `44`) %>%
+#   dplyr::select(Cluster, Allele2, Allele3, Allele4)
+
+conting %<>% column_to_rownames("Cluster")
+# conting2 %<>% column_to_rownames("Cluster")
+
+fisher.test(conting, simulate.p.value = TRUE, B = 1e5) 
+
+```
+
+Different ages between clusters?
+
+```{r}
+samples %>% 
+  dplyr::filter(Diagnosis %in% c("AD", "Control"), 
+                Tissue == "TemporalCortex")%>%
+  left_join(clusters_km, by = "Sample")%>%
+  dplyr::group_by(Cluster, AgeAtDeath, Diagnosis) %>%
+  dplyr::summarise(n = n())%>%
+  ungroup() %>%
+  dplyr::mutate(Cluster = as.factor(as.character(Cluster))) %>%
+  ggplot(aes(x = Cluster, y = AgeAtDeath, colour = Diagnosis)) +
+  geom_boxplot() 
+
+samples %>%
+  left_join(mayo_samples[, c("SampleID", "AgeAtDeath", "ApoE", "Diagnosis")], 
+            by = c("Sample"="SampleID")) %>%
+  dplyr::group_by(Cluster, AgeAtDeath, Diagnosis) %>%
+  dplyr::summarise(n = n())%>%
+  ungroup() %>%
+  dplyr::mutate(Cluster = as.factor(as.character(Cluster))) %>%
+  ggplot(aes(x = Cluster, y = AgeAtDeath, colour = Diagnosis)) +
+  geom_boxplot() 
+```
+
+
+
+## Export Objects
+
+- PC1 values
+
+```{r eval=FALSE}
+PC1_TCsamples %>% saveRDS(here("data", "datasets", "mayo", 
+                               "PC1_TCsamples.rds"))
+```
+
+- Hierarchical clusters
+
+```{r}
+clusters_hier %>% saveRDS(here("data", "datasets", "mayo", 
+                               "clusters_hier.rds"))
+```
+
+```{r}
+clusters_km %>% saveRDS(here("data", "datasets", "mayo", "clusters_km.rds"))
+```
+
+
+- PCA of PC1 values
+
+```{r eval=FALSE}
+PCAplot_TCsamples%>% export::graph2pdf(here("data", "datasets", 
+                                            "mayo", "fig", "PC1_pca.pdf"))
+```
+
+- t-SNE object (for reproducing plots
+
+```{r}
+tsne_TCsamples %>% saveRDS(here("data", "datasets", "mayo",
+                                "tsne_TCsamples.rds"))
+```
+
+- Heatmap
+
+```{r eval=FALSE}
+save_pheatmap_pdf(plotHeatmap, width = 11, height = 11,
+                  filename = here("data", "datasets", "mayo",
+                                  "fig", "clusterHeatmap_hier.pdf"))
 ```
 
