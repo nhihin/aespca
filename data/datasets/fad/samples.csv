@@ -1,0 +1,22 @@
+Sample,title,geo_accession,sex,age,apoe,braak,psen,rep,group,hasPsenMutation,hasAD
+GSM967927,Brain-control 1,GSM967927,Male,45,3_3,No neuropathological findings,None,1,control,FALSE,FALSE
+GSM967919,Brain-control 2,GSM967919,Female,50,3_3,No neuropathological findings,None,2,control,FALSE,FALSE
+GSM967920,Brain-control 3,GSM967920,Male,58,3_4,No neuropathological findings,None,3,control,FALSE,FALSE
+GSM967921,Brain-control 4,GSM967921,Male,46,3_2,No neuropathological findings,None,4,control,FALSE,FALSE
+GSM967922,Brain-control 5,GSM967922,Male,47,3_3,No neuropathological findings,None,5,control,FALSE,FALSE
+GSM967923,Brain-control 6,GSM967923,Male,49,3_3,No neuropathological findings,None,6,control,FALSE,FALSE
+GSM967924,Brain-control 7,GSM967924,Male,53,3_3,No neuropathological findings,None,7,control,FALSE,FALSE
+GSM967925,Brain-Early-onset Alzheimer disease- 1,GSM967925,Female,63,3_3,"A3, B3, C3 + CAA moderate",None,1,eoAD,FALSE,TRUE
+GSM967926,Brain-Early-onset Alzheimer disease- 2,GSM967926,Female,65,3_3,"A3, B3, C3",None,2,eoAD,FALSE,TRUE
+GSM967918,Brain-Early-onset Alzheimer disease- 3,GSM967918,Female,57,3_4,"A3, B3, C3 + CAA severe",None,3,eoAD,FALSE,TRUE
+GSM967928,Brain-Early-onset Alzheimer disease- 4,GSM967928,Male,69,3_3,"A3, B3, C3 + CAA moderate",None,4,eoAD,FALSE,TRUE
+GSM967929,Brain-Early-onset Alzheimer disease- 5,GSM967929,Male,61,3_3,"A3, B3, C3 + CAA mild",None,5,eoAD,FALSE,TRUE
+GSM967930,Brain-Early-onset Alzheimer disease- 6,GSM967930,Male,68,3_3,"A3, B3, C3 + CAA severe",None,6,eoAD,FALSE,TRUE
+GSM967931,Brain-Early-onset Alzheimer disease- 7,GSM967931,Male,60,3_3,"A3, B3, C3 + CAA moderate + isolated MVL",None,7,eoAD,FALSE,TRUE
+GSM967932,Brain-Alzheimer's disease PSEN1 mutation carrier patient-1,GSM967932,Female,48,3_4,"A3, B3, C3 + CAA severe + LBD amygdala predominant",M139T,1,eoAD_psen1,TRUE,TRUE
+GSM967933,Brain-Alzheimer's disease PSEN1 mutation carrier patient-2,GSM967933,Male,53,3_3,"A3, B3, C3 + LBD limbic predominant",M139T,2,eoAD_psen1,TRUE,TRUE
+GSM967934,Brain-Alzheimer's disease PSEN1 mutation carrier patient-3,GSM967934,Male,54,3_3,"A3, B3, C3 + CAA moderate",V89L,3,eoAD_psen1,TRUE,TRUE
+GSM967935,Brain-Alzheimer's disease PSEN1 mutation carrier patient-4,GSM967935,Male,64,3_3,"A3, B3, C3 + CAA moderate",M139T,4,eoAD_psen1,TRUE,TRUE
+GSM967936,Brain-Alzheimer's disease PSEN1 mutation carrier patient-5,GSM967936,Male,57,3_3,"A3, B3, C3 + CAA severe",M139T,5,eoAD_psen1,TRUE,TRUE
+GSM967937,Brain-Alzheimer's disease PSEN1 mutation carrier patient-6,GSM967937,Male,57,3_2,"A3, B3, C3 + CAA severe",V89L,6,eoAD_psen1,TRUE,TRUE
+GSM967938,Brain-Alzheimer's disease PSEN1 mutation carrier patient-7,GSM967938,Male,44,3_3,"A3, B3, C3 + CAA severe",E120G,7,eoAD_psen1,TRUE,TRUE
