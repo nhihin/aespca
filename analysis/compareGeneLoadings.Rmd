@@ -1,0 +1,278 @@
+---
+title: "Compare Gene Loadings from AES-PCA for zebrafish and mouse"
+author: "Nhi Hin"
+date: "2020-08-05"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+```{r Setup, include=FALSE}
+# Load packages:
+library(here)
+library(magrittr)
+library(dplyr)
+library(biomaRt)
+library(AnnotationHub)
+library(purrr)
+library(tidyr)
+library(org.Mm.eg.db)
+library(org.Dr.eg.db)
+```
+
+
+## Introduction
+
+- Previously, AES-PCA was run using the Hallmark gene set collection on 
+the fAD-like zebrafish and 5XFAD mouse datasets. 
+
+- The results of AES-PCA include sparse PC values (PC1 and PC2) in addition to 
+loadings that indicate the genes contributing most to the variation in 
+gene set activity across samples. 
+
+- Here, we will compare the gene loadings from two datasets to see whether 
+gene set activity tends to be driven by the same or by different genes. 
+
+- This is important to know as it would highlight the utility of looking 
+at changes at the gene set level (more broader state compared to 
+gene level), while also showing how AES-PCA allows us to go into the 
+gene level as well. 
+
+## 1. Import Data
+
+- The AES-PCA loadings for PC1 were saved in the `pathwayPCA-mouse.Rmd` and 
+`pathwayPCA-zebrafish.Rmd` documents. Here we will load in the saved objects.
+
+```{r}
+loadings_zeb <- readRDS(here("data", "datasets", "zebrafish", 
+                              "geneLoadings.rds"))
+
+loadings_mouse <-  readRDS(here("data", "datasets", "mouse", "GSE140286", 
+                              "geneLoadings.rds"))
+```
+
+- Confirm that the same gene sets are in the datasets.
+
+```{r}
+names(loadings_zeb$q96VsWT_6mth) %in% names(loadings_mouse$XFADVsWT_3mth)
+```
+
+- There is one `FALSE` indicating a mismatch (spelling mistake) from using 
+different versions of MSigDB Hallmark gene sets for zebrafish and mouse. 
+
+```{r}
+names(loadings_zeb$q96VsWT_6mth)[!names(loadings_zeb$q96VsWT_6mth) %in% names(loadings_mouse$XFADVsWT_3mth)]
+
+loadings_mouse$XFADVsWT_3mth$HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY
+```
+
+```{r}
+names(loadings_zeb$q96VsWT_6mth) %<>%
+  gsub(x = ., pattern = "HALLMARK_REACTIVE_OXIGEN_SPECIES_PATHWAY", 
+       replacement = "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+
+names(loadings_zeb$q96vsWT_24mth) %<>%
+  gsub(x = ., pattern = "HALLMARK_REACTIVE_OXIGEN_SPECIES_PATHWAY", 
+       replacement = "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+```
+
+## 2. Convert gene IDs
+
+- We need to convert gene IDs from mouse to zebrafish and vice versa.
+
+```{r}
+# Mouse entrez and ensembl ids:
+mEns <- org.Mm.egENSEMBL %>%
+  as.data.frame %>%
+  set_colnames(c("m_entrezgene","m_ensembl"))
+
+# Create a data.frame to map between human entrezgenes and zebrafish ensembl IDs.
+# BioMart only includes homolog mappings for ensembl IDs which is why we need to 
+# retrieve human ensembl IDs, then join to the humanEntrezEns data.frame,
+# in order to get the desired human entrezgenes to zebrafish ensembl ID mapping. 
+mMart <- useMart("ENSEMBL_MART_ENSEMBL", "mmusculus_gene_ensembl")
+getFromBiomart <- c("ensembl_gene_id", "drerio_homolog_ensembl_gene")
+mAndZebEnsGenes <- getBM(getFromBiomart, values = unique(mEns$m_ensembl), 
+                           mart = mMart) %>%
+  set_colnames(c("mouse_ensembl", "zeb_ensembl")) %>%
+  dplyr::filter(complete.cases(.),
+                zeb_ensembl != "")
+```
+
+- Try the other way around too in case there are some zebrafish-mouse 
+conversions missed by going from mouse to zebrafish gene IDs.
+
+```{r}
+# Zebrafish entrez and ensembl ids:
+zEns <- org.Dr.egENSEMBL %>%
+  as.data.frame %>%
+  set_colnames(c("z_entrezgene","z_ensembl"))
+
+# Create a data.frame to map between human entrezgenes and zebrafish ensembl IDs.
+# BioMart only includes homolog mappings for ensembl IDs which is why we need to 
+# retrieve human ensembl IDs, then join to the humanEntrezEns data.frame,
+# in order to get the desired human entrezgenes to zebrafish ensembl ID mapping. 
+zmart <- useMart("ENSEMBL_MART_ENSEMBL", "drerio_gene_ensembl")
+getFromBiomart <- c("ensembl_gene_id", "mmusculus_homolog_ensembl_gene")
+zAndMEnsGenes <- getBM(getFromBiomart, values = unique(zEns$z_ensembl), 
+                           mart = zmart) %>%
+  set_colnames(c("zeb_ensembl", "mouse_ensembl")) %>%
+  dplyr::filter(complete.cases(.),
+                mouse_ensembl != "")
+```
+
+```{r}
+dim(mAndZebEnsGenes)
+dim(zAndMEnsGenes)
+
+table(mAndZebEnsGenes$zeb_ensembl %in% zAndMEnsGenes$zeb_ensembl)
+```
+
+```{r}
+
+loadings_zeb %<>% lapply(function(x){
+  x %>% lapply(function(y){
+    y %>% left_join(zAndMEnsGenes, by = c("gene_id"="zeb_ensembl"))
+  })
+})
+
+# loadings_zeb$q96vsWT_24mth %<>% lapply(function(x){
+#   x %>%left_join(zAndMEnsGenes, by = c("gene_id"="zeb_ensembl"))
+# })
+
+
+loadings_mouse %<>% lapply(function(x){
+  x %>% lapply(function(y){
+    y %>% left_join(mAndZebEnsGenes, by = c("gene_id"="mouse_ensembl"))
+  })
+})
+```
+
+
+
+## 2. Comparisons
+
+### 2.1. Common genes driving changes in young adult fAD-like and 5XFAD brains
+
+```{r}
+# Loadings of the zebrafish, using list-column workflow on purrr
+youngLoadings_zeb <- bind_rows(loadings_zeb$q96VsWT_6mth, .id = "Geneset") %>%
+  dplyr::group_by(Geneset) %>%
+  tidyr::nest() %>%
+  dplyr::rename(data_zeb = data)
+
+# Loadings of mouse
+youngLoadings_mouse <- bind_rows(loadings_mouse$XFADVsWT_3mth, 
+                                 .id="Geneset") %>%
+  dplyr::group_by(Geneset) %>%
+  tidyr::nest() %>%
+  dplyr::rename(data_mouse = data)
+
+# Tidy data.frame
+youngLoadings_all <- full_join(youngLoadings_zeb, 
+                               youngLoadings_mouse, by = "Geneset") %>%
+  mutate(overlapping_genes_mouse = map2(data_zeb, data_mouse, function(x,y){
+    inner_join(x, y, by = c("mouse_ensembl"="gene_id"))
+  })) 
+youngLoadings_all$overlapping_genes_mouse %<>% set_names(
+  youngLoadings_all$Geneset
+)
+
+# Get the genes which contribute to PC1 in both datasets.
+conservedGenes <- youngLoadings_all$overlapping_genes_mouse %>% 
+  bind_rows(.id = "Geneset") %>% 
+  dplyr::filter(gene_id == zeb_ensembl) %>% 
+  dplyr::select(Geneset, gene_id, PC1.x, 
+                mouse_ensembl, PC1.y,
+                gene_name.y, description.y) %>%
+  dplyr::rename(gene_name = gene_name.y,
+                description = description.y,
+                zeb_ensembl = gene_id,
+                PC1_zeb = PC1.x,
+                PC1_mouse = PC1.y) 
+```
+
+### 2.2. Common genes driving changes in aged brains
+
+- Same thing as above but for the older age group.
+
+```{r}
+# Loadings of the zebrafish, using list-column workflow on purrr
+agedLoadings_zeb <- bind_rows(loadings_zeb$q96vsWT_24mth, .id = "Geneset") %>%
+  dplyr::group_by(Geneset) %>%
+  tidyr::nest() %>%
+  dplyr::rename(data_zeb = data)
+
+# Loadings of mouse
+agedLoadings_mouse <- bind_rows(loadings_mouse$XFADvsWT_12mth, 
+                                 .id="Geneset") %>%
+  dplyr::group_by(Geneset) %>%
+  tidyr::nest() %>%
+  dplyr::rename(data_mouse = data)
+
+# Tidy data.frame
+agedLoadings_all <- full_join(agedLoadings_zeb, 
+                               agedLoadings_mouse, by = "Geneset") %>%
+  mutate(overlapping_genes_mouse = map2(data_zeb, data_mouse, function(x,y){
+    inner_join(x, y, by = c("mouse_ensembl"="gene_id"))
+  })) 
+agedLoadings_all$overlapping_genes_mouse %<>% set_names(
+  agedLoadings_all$Geneset
+)
+
+# Get the genes which contribute to PC1 in both datasets.
+conservedGenes_aged <- agedLoadings_all$overlapping_genes_mouse %>% 
+  bind_rows(.id = "Geneset") %>% 
+  dplyr::filter(gene_id == zeb_ensembl) %>% 
+  dplyr::select(Geneset, gene_id, PC1.x, 
+                mouse_ensembl, PC1.y,
+                gene_name.y, description.y) %>%
+  dplyr::rename(gene_name = gene_name.y,
+                description = description.y,
+                zeb_ensembl = gene_id,
+                PC1_zeb = PC1.x,
+                PC1_mouse = PC1.y) 
+```
+
+## 3. Summary of Results
+
+- Overall, it seems that the genes driving variation between samples 
+in the fAD-like zebrafish and 5XFAD mouse datasets are mostly different, 
+with only a few similarities. 
+
+- The similar genes at young age are shown below.
+
+```{r}
+conservedGenes
+```
+
+- Old age:
+
+```{r}
+conservedGenes_aged
+```
+
+- Limitations are that the young age groups may not be directly comparable 
+or the most equivalent due to different life spans of zebrafish and 
+mice, so this is an approximation. However, the results overall 
+do seem to indicate that the pathological states / changes occurring 
+due to the fAD-like and 5XFAD mutations differ quite significantly, despite 
+some of the gene sets being in common. 
+
+- The significance of this is that we are able to detect some similarities 
+between these two animal models in terms of the types of biological 
+activities that are altered as a result of the respective mutations. 
+However, the genes driving these changes largely differ. 
+
+## Export Objects
+
+- Lists of genes which contribute to AES PC1 loadings similarly in 
+fAD-like zebrafish and 5XFAD mouse brains. 
+
+```{r eval=FALSE}
+conservedGenes %>% saveRDS(here("data", "loadings", 
+                                "conservedGenes_young.rds"))
+
+conservedGenes_aged %>% saveRDS(here("data", "loadings", 
+                                     "conservedGenes_aged.rds"))
+```
+
