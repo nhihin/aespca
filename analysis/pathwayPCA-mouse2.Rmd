@@ -45,6 +45,12 @@ hallmarkCol <- CreatePathwayCollection(
   sets_ls = hallmarkGenes,
   TERMS = hallmarkNames
 )
+
+ireGenes <- readRDS(here("data", "ireGenes", "mouse", "ireGenes.rds"))
+ireNames <- names(ireGenes)
+ireCol <- CreatePathwayCollection(
+  sets_ls = ireGenes, TERMS = ireNames
+)
 ```
 
 ### 2. Tidy sample/expression matrix
@@ -168,7 +174,91 @@ sigSets_6mth
 sigSets_11mth
 ```
 
+- IRE
+
+```{r}
+omics_genotype_6mth_ire <- CreateOmics(
+  assayData_df = tidyDat_6mth,
+  pathwayCollection_ls = ireCol,
+  response = samples_genotype_6mth,
+  respType = "categ"
+)
+omics_genotype_6mth_ire %>% saveRDS(here("data", "datasets", "mouse",
+                                         "GSE142633",
+                                         "omics_genotype_6mth_ire.rds"))
+
+omics_genotype_11mth_ire <- CreateOmics(
+  assayData_df = tidyDat_11mth,
+  pathwayCollection_ls = ireCol,
+  response = samples_genotype_11mth,
+  respType = "categ"
+)
+omics_genotype_11mth_ire %>% saveRDS(here("data", "datasets", "mouse",
+                                         "GSE142633",
+                                         "omics_genotype_11mth_ire.rds"))
+
+AESPCA_pVals(
+  object = omics_genotype_6mth_ire,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+)%>% saveRDS("./test_genotype_6mth_ire.rds")
+
+AESPCA_pVals(
+  object = omics_genotype_11mth_ire,
+  numReps = 0,
+  numPCs = 2,
+  parallel = TRUE,
+  numCores = 2,
+  adjustpValues = TRUE,
+  adjustment = c("Holm", "BH")
+) %>% saveRDS("./test_genotype_11mth_ire.rds")
+
+test_genotype_6mth_ire <- readRDS(here("data", "datasets", "mouse",
+                                       "GSE142633", 
+                                       "test_genotype_6mth_ire.rds"))
+
+test_genotype_11mth_ire <- readRDS(here("data", "datasets", "mouse",
+                                       "GSE142633", 
+                                       "test_genotype_11mth_ire.rds"))
+
+# Get p-values
+test_genotype_6mth_ire$pVals_df
+test_genotype_11mth_ire$pVals_df
+```
+
+
 ### 5. Visualisation
+
+- Boxplots
+
+```{r}
+ire_comparisons <- list(c("q96_24_0", "wt_24_0"))
+
+violin_ire_plot_24mths <- test_genotype_24mth_ire$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_24mth_ire$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "geneset") %>%
+  left_join(samples, by = "Sample") %>%
+  dplyr::filter(Hypoxia == 0) %>%
+  ggpubr::ggviolin(x = "Group", y = "V1",
+                    fill = "Group", add = "jitter",
+                   add.params = list(fill = "white"),
+                   palette = c("#dddddd", "orangered", 
+                               "#dddddd", "orangered")) +
+  ggpubr::stat_compare_means(comparisons = ire_comparisons)+
+  #ggpubr::stat_compare_means()  +
+  facet_wrap(~geneset, scales = "free_y") +
+  labs(y = "PC1 Value")
+
+violin_ire_plot_24mths
+```
+
 
 #### Get PC1 values into wide format
 

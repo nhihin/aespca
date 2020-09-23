@@ -203,12 +203,62 @@ test_genotype_12mth$pVals_df
 
 # Extract significant sets
 sigSets_3mth <- test_genotype_3mth$pVals_df %>%
-  dplyr::filter(FWER_Holm < 0.05)
+  dplyr::filter(FDR_BH < 0.05)
 sigSets_6mth <- test_genotype_6mth$pVals_df %>%
-  dplyr::filter(FWER_Holm < 0.05)
+  dplyr::filter(FDR_BH < 0.05)
 sigSets_12mth <- test_genotype_12mth$pVals_df %>%
-  dplyr::filter(FWER_Holm < 0.05)
+  dplyr::filter(FDR_BH < 0.05)
 ```
+
+#### 4.1. Comparison to conventional GSEA results
+
+```{r}
+mouResults <- readRDS(here("data", "datasets", "mouse", 
+                            "GSE140286", "gsea.rds"))
+```
+
+- Conventional GSEA found that 16 gene sets were enriched. 
+
+```{r}
+mouResults$combTest$effectOf5XFAD_3mth %>% dplyr::filter(fdr < 0.05) 
+```
+
+- In contrast the AES-PCA method found that no gene sets were enriched. 
+This is likely because of the small sample size (and performing AES-PCA on 
+this age group separately - as opposed to borrowing info in the GSEA 
+approach which utilises *limma*). 
+
+```{r}
+sigSets_3mth
+```
+
+- However, if we look at the 6 month age group (49 gene sets enriched)
+
+```{r}
+mouResults$combTest$effectOf5XFAD_6mth %>% dplyr::filter(fdr< 0.05) 
+```
+
+- 44 gene sets enriched
+
+```{r}
+sigSets_6mth
+```
+
+```{r}
+sigSets_6mth %>% inner_join(mouResults$combTest$effectOf5XFAD_6mth %>% 
+                              dplyr::filter(fdr< 0.05), 
+                            by = c("pathways"="Geneset") ) 
+```
+
+
+```{r}
+library(eulerr)
+mouseVenn <- c("GSEA"=49, "AESPCA"=44, "GSEA&AESPCA"=44)
+eulerr::venn(mouseVenn) %>% plot(quantities=TRUE) %>%
+  export::graph2pdf(here("data", "datasets", "mouse", "GSE140286", "fig", 
+                         "venn.pdf"))
+```
+
 
 - IRE
 
@@ -285,8 +335,134 @@ test_genotype_12mth_ire <- readRDS(here("data", "datasets", "mouse",
                                        "test_genotype_12mth_ire.rds"))
 ```
 
-```{r}
+### 5. Gene Loadings
 
+- We can look at the gene loadings of the calculated PCs in order to see 
+which genes are contributing most to the activity of a particular gene set. 
+
+- First retrieve gene annotations from `AnnotationHub`.
+
+```{r}
+# Search for and load relevant AnnotationHub object:
+ah <- AnnotationHub()
+# ah %>%
+#   subset(grepl("musculus", species)) %>%
+#   subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH69210"]] # Ensembl 96 EnsDb for Mus musculus
+
+# Get gene information:
+genes <- genes(ensDb)
+genes %<>% as.data.frame
+head(genes)
+```
+
+- Test out getting the gene loadings from one gene set (Oxidative 
+Phosphorylation). There are 10 genes which are contributing to the 
+loading of PC1. 
+
+```{r}
+test_genotype_3mth$loadings_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>%
+  as.data.frame %>%
+  rownames_to_column("gene_id") %>%
+  dplyr::filter(PC1 != 0) %>% 
+  left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+  dplyr::arrange(desc(abs(PC1))) 
+```
+
+- Apply the above to all gene sets.
+
+```{r}
+geneLoadings_3mth <- test_genotype_3mth$loadings_ls %>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_6mth <- test_genotype_6mth$loadings_ls %>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_12mth <- test_genotype_12mth$loadings_ls %>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings <- list(
+  XFADVsWT_3mth = geneLoadings_3mth,
+  XFADvsWT_6mth = geneLoadings_6mth,
+  XFADvsWT_12mth = geneLoadings_12mth
+)
+```
+
+- Loadings for IRE gene sets
+
+```{r}
+geneLoadings_ire_3mth <- test_genotype_3mth_ire$loadings_ls%>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_ire_6mth <- test_genotype_6mth_ire$loadings_ls%>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_ire_12mth <- test_genotype_12mth_ire$loadings_ls%>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_ire <- list(
+  XFADVsWT_3mth = geneLoadings_ire_3mth,
+  XFADvsWT_6mth = geneLoadings_ire_6mth,
+  XFADvsWT_12mth = geneLoadings_ire_12mth
+)
+
+```
+
+```{r}
+geneLoadings %>% saveRDS(here("data", "datasets", "mouse", "GSE140286", 
+                              "geneLoadings.rds"))
+
+geneLoadings_ire %>% saveRDS(here("data", "datasets", "mouse", "GSE140286", 
+                                  "geneLoadings_ire.rds"))
 ```
 
 

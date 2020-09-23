@@ -231,7 +231,7 @@ butterfly_young <- bind_rows(zeb_facet1, mou2_facet1) %>%
   #ggpol::facet_share(~contrast, scales = "free", strip.position = "left") +
   scale_fill_manual(values=c("#DDDDDD","cornflowerblue","#FE4365"))+
   coord_flip() +
-    geom_text(aes(label=significant),vjust=0.77, hjust = 0)+
+    geom_text(aes(label=significant),vjust=0, hjust = 0)+
   labs(x = "Number of genes", y = "Hallmark gene set",
        fill = "Direction")
 
@@ -240,6 +240,9 @@ butterfly_young
 #export::graph2ppt(butterfly_young, here("data", "initial_comparisons",
 #                                        "fig", "butterfly_young"))
 
+# Extract gene sets which are significantly enriched in both datasets.
+zeb_facet1 %>% inner_join(mou2_facet1, by = c("Geneset")) %>% 
+  dplyr::filter(significant.x == TRUE & significant.y == TRUE) %>% View
 ```
 
 - Plot the aged zebrafish and aged mice from both datasets (11 and 12 

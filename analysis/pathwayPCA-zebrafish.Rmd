@@ -156,23 +156,23 @@ omics_genotype_24mth <- CreateOmics(
 )
 
 # For ire genes
-omics_genotype_6mth_ire <- CreateOmics(
-  assayData_df = tidyDat_6mth,
-  pathwayCollection_ls = ireCol,
-  response = samples_genotype_6mth,
-  respType = "categ"
-)
-
-omics_genotype_24mth_ire <- CreateOmics(
-  assayData_df = tidyDat_24mth,
-  pathwayCollection_ls = ireCol,
-  response = samples_genotype_24mth,
-  respType = "categ"
-)
-omics_genotype_6mth_ire %>% saveRDS(here("data", "datasets", "zebrafish",
-                                         "omics_genotype_6mth_ire.rds"))
-omics_genotype_24mth_ire %>% saveRDS(here("data", "datasets", "zebrafish",
-                                         "omics_genotype_24mth_ire.rds"))
+# omics_genotype_6mth_ire <- CreateOmics(
+#   assayData_df = tidyDat_6mth,
+#   pathwayCollection_ls = ireCol,
+#   response = samples_genotype_6mth,
+#   respType = "categ"
+# )
+# 
+# omics_genotype_24mth_ire <- CreateOmics(
+#   assayData_df = tidyDat_24mth,
+#   pathwayCollection_ls = ireCol,
+#   response = samples_genotype_24mth,
+#   respType = "categ"
+# )
+# omics_genotype_6mth_ire %>% saveRDS(here("data", "datasets", "zebrafish",
+#                                          "omics_genotype_6mth_ire.rds"))
+# omics_genotype_24mth_ire %>% saveRDS(here("data", "datasets", "zebrafish",
+#                                          "omics_genotype_24mth_ire.rds"))
 
 
 # Perform enrichment testing using AES-PCA
@@ -251,6 +251,66 @@ sigSets_24mth # 47
 # test_AD2$pVals_df
 ```
 
+#### 4.1. Are AES-PCA significant gene sets similar to conventional methods?
+
+- Conventional GSEA methods include `limma::fry`, `fgsea`, and `limma::mroast`. 
+
+- We previously analysed this dataset using these 3 methods so let's look 
+at the overlap with the results that AES-PCA gives us. 
+
+- Import in the previous results:
+
+```{r}
+zebResults <- readRDS(here("data", "datasets", "zebrafish", 
+                             "gsea.rds"))
+
+
+```
+
+- 17 significant gene sets at 6 months using conventional GSEA methods
+
+```{r}
+sigSets_gsea_6mths <- zebResults$combTest$normoxia_6mth_mutant_vs_wt %>% 
+  dplyr::filter(fdr<0.05) 
+```
+
+- Using AES-PCA, we get 31 significant gene sets at 6 months
+
+```{r}
+sigSets_6mth
+```
+
+- Find the overlap:
+
+```{r}
+sigSets_6mth %>% inner_join(zebResults$combTest$normoxia_6mth_mutant_vs_wt, 
+                            by = c("pathways"="Geneset")) %>% 
+  dplyr::filter(fdr<0.05)%>% View
+```
+
+- 11 of the gene sets show overlap between the two methods. 
+
+```{r}
+left_join(zebResults$combTest$normoxia_6mth_mutant_vs_wt, sigSets_6mth,
+                            by = c("Geneset"="pathways")) %>% 
+  dplyr::filter(fdr<0.05)%>% View
+```
+
+- Represented on a Venn diagram:
+
+```{r}
+library(eulerr)
+zebVenn <- c("GSEA"=17, "AESPCA"=31, "GSEA&AESPCA"=11)
+vennPlot <- plot(euler(zebVenn), quantities = TRUE) 
+vennPlot %>% export::graph2pdf(here("data", "datasets", "zebrafish", "fig", 
+                         "overlap_GSEA_AESPCA.pdf"))
+
+
+```
+
+- This appears reasonable considering that the two methods are based upon 
+very different fundamental methodologies. 
+
 ### 5. Gene Loadings
 
 - We can look at the gene loadings of the calculated PCs in order to see 
@@ -261,23 +321,93 @@ which genes are contributing most to the activity of a particular gene set.
 ```{r}
 # Search for and load relevant AnnotationHub object:
 ah <- AnnotationHub()
-ah %>%
-  subset(grepl("rerio", species)) %>%
-  subset(rdataclass == "EnsDb")
+# Search for the Ensembldb to use
+# ah %>%
+#   subset(grepl("rerio", species)) %>%
+#   subset(rdataclass == "EnsDb")
 ensDb <- ah[["AH69169"]] # Ensembl 96 EnsDb for Danio rerio
 
-# Get gene and transcript information:
+# Get gene information:
 genes <- genes(ensDb)
-transcripts <- transcripts(ensDb)
+genes %<>% as.data.frame
+head(genes)
 ```
 
+- Test out getting the gene loadings from one gene set (Oxidative 
+Phosphorylation). There are 10 genes which are contributing to the 
+loading of PC1. 
 
 ```{r}
 test_genotype_6mth$loadings_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>%
   as.data.frame %>%
-  rownames_to_column("ensembl") %>%
-  filter(PC1 != 0) %>% 
-  left_join()
+  rownames_to_column("gene_id") %>%
+  dplyr::filter(PC1 != 0) %>% 
+  left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+  dplyr::arrange(desc(abs(PC1))) 
+```
+
+- Apply the above to all gene sets.
+
+```{r}
+geneLoadings_6mth <- test_genotype_6mth$loadings_ls %>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_24mth <- test_genotype_24mth$loadings_ls %>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings <- list(
+  q96VsWT_6mth = geneLoadings_6mth,
+  q96vsWT_24mth = geneLoadings_24mth
+)
+```
+
+- Loadings for IRE gene sets
+
+```{r}
+geneLoadings_ire_6mth <- test_genotype_6mth_ire$loadings_ls%>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_ire_24mth <- test_genotype_24mth_ire$loadings_ls%>%
+  lapply(function(x){
+    x %>%
+      as.data.frame %>%
+      rownames_to_column("gene_id") %>%
+      dplyr::filter(PC1 != 0) %>% 
+      left_join(genes[, c("gene_id", "gene_name", 
+                      "gene_biotype", "description")], by = "gene_id") %>% 
+      dplyr::arrange(desc(abs(PC1))) 
+  })
+
+geneLoadings_ire <- list(
+  q96VsWT_6mth = geneLoadings_ire_6mth,
+  q96VsWT_24mth = geneLoadings_ire_24mth
+)
+
 ```
 
 
@@ -578,6 +708,17 @@ test_genotype_6mth %>% saveRDS(here("data", "datasets", "zebrafish",
 test_genotype_24mth %>% saveRDS(here("data", "datasets", "zebrafish", 
                                  "test_genotype_24mth.rds")) 
 ```
+
+- Gene Loadings 
+
+```{r}
+geneLoadings %>% saveRDS(here("data", "datasets", "zebrafish", 
+                              "geneLoadings.rds"))
+
+geneLoadings_ire %>% saveRDS(here("data", "datasets", "zebrafish",
+                                  "geneLoadings_ire.rds"))
+```
+
 
 - PC1 values
 

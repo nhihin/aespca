@@ -1,0 +1,180 @@
+---
+title: "Initial Combined PCAs"
+author: "Nhi Hin"
+date: "2020-09-04"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+library(biomaRt)
+theme_set(theme_bw(base_size = 14))
+```
+
+
+## Introduction
+
+- Create a PCA of all datasets being analysed in **result 2** of the paper. 
+  - Antonell eoAD/eofAD dataset (human)
+  - Zebrafish (fAD mutation-like)
+  - Mouse (5XFAD)
+
+## Import Data 
+
+```{r}
+zebData <- readRDS(here("data/datasets/zebrafish/dge.rds"))
+mouseData <- readRDS(here("data/datasets/mouse/GSE142633/dge.rds"))
+# exprs <- readRDS(here("data", "datasets", "fad", "procData.rds"))$exprs
+# rownames(exprs) <- gsub(x = rownames(exprs), pattern = "_.*$",
+#                         replacement = "")
+# #samples <- readRDS(here("data", "datasets", "fad", "procData.rds"))$samples
+# samples <- read_csv(here("data", "datasets", "fad", "samples.csv"))
+# samples %<>% mutate(hasAD = c(rep(FALSE, 7), rep(TRUE, 14)))
+
+
+fADData <- readRDS(here("data", "datasets", "fad", "procData.rds"))
+fADData$annot <- readRDS(here("data", "datasets", "fad", "annot.rds"))
+# Get the probes into gene IDs.
+fADData$annot %>% head
+fADData$exprs2 <- fADData$exprs %>% rownames_to_column("PROBEID") %>%
+  left_join(fADData$annot[, c("PROBEID", "ENSEMBL")], by = "PROBEID") %>%
+  dplyr::filter(!is.na(ENSEMBL)) %>%
+  dplyr::distinct(ENSEMBL, .keep_all = TRUE) %>%
+  dplyr::select(-PROBEID) %>%
+  column_to_rownames("ENSEMBL")
+```
+
+- Convert zebrafish and mouse datasets into human Ensembl gene ids.
+
+- First retrieve homologous genes from biomart. 
+
+```{r}
+ensembl_human <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl_mouse <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+ensembl_zeb <- useMart("ensembl", dataset = "drerio_gene_ensembl")
+
+attr <- c("ensembl_gene_id", "hsapiens_homolog_ensembl_gene")
+
+mouse2Human <- getBM(attributes = attr,
+                     values = rownames(mouseData$counts),
+                     mart = ensembl_mouse)%>%
+  dplyr::filter(hsapiens_homolog_ensembl_gene != "")
+
+zeb2Human <- getBM(attributes = attr,
+                   values = rownames(zebData$counts),
+                   mart = ensembl_zeb) %>%
+  dplyr::filter(hsapiens_homolog_ensembl_gene != "")
+
+```
+
+- Zebrafish
+
+```{r}
+zebData$genes2 <- zebData$genes %>% 
+  left_join(zeb2Human, by = "ensembl_gene_id") %>%
+  dplyr::filter(!is.na(ensembl_gene_id) &
+                  !is.na(hsapiens_homolog_ensembl_gene)) %>%
+  dplyr::distinct(hsapiens_homolog_ensembl_gene, .keep_all = TRUE)
+zebData$counts2 <- zebData$counts %>% as.data.frame %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  left_join(zebData$genes2[, c("ensembl_gene_id", 
+                               "hsapiens_homolog_ensembl_gene")]) %>%
+  dplyr::filter(!is.na(ensembl_gene_id) &
+                  !is.na(hsapiens_homolog_ensembl_gene)) %>%
+  dplyr::distinct(hsapiens_homolog_ensembl_gene, .keep_all = TRUE)%>%
+  column_to_rownames("hsapiens_homolog_ensembl_gene") %>%
+  dplyr::select(-ensembl_gene_id)  %>%
+  rownames_to_column("human_ensembl")
+```
+
+- Mouse
+
+```{r}
+mouseData$genes2 <- mouseData$genes %>%
+  left_join(mouse2Human, by = "ensembl_gene_id") %>%
+  dplyr::filter(!is.na(ensembl_gene_id) &
+                  !is.na(hsapiens_homolog_ensembl_gene)) %>%
+  dplyr::distinct(hsapiens_homolog_ensembl_gene, .keep_all = TRUE)
+
+mouseData$counts2 <- mouseData$counts %>% as.data.frame %>%
+  rownames_to_column("ensembl_gene_id") %>%
+  left_join(mouseData$genes2[, c("ensembl_gene_id", 
+                               "hsapiens_homolog_ensembl_gene")]) %>%
+  dplyr::filter(!is.na(ensembl_gene_id) &
+                  !is.na(hsapiens_homolog_ensembl_gene)) %>%
+  dplyr::distinct(hsapiens_homolog_ensembl_gene, .keep_all = TRUE)%>%
+  column_to_rownames("hsapiens_homolog_ensembl_gene") %>%
+  dplyr::select(-ensembl_gene_id) %>%
+  rownames_to_column("human_ensembl")
+```
+
+- Merge data
+
+```{r}
+allData <- inner_join(zebData$counts2, 
+                     mouseData$counts2 , by = "human_ensembl") %>%
+  as.data.frame %>%
+  column_to_rownames("human_ensembl") %>%
+  cpm(log=TRUE) %>%
+  as.data.frame %>%
+  rownames_to_column("human_ensembl") %>%
+  inner_join(fADData$exprs2 %>% rownames_to_column("human_ensembl"))
+dim(allData) # 12,638 genes
+```
+
+- Merge sample info too so that we can plot an annotated PCA
+
+```{r}
+allSample <- zebData$samples %>%
+  dplyr::select(sample, Age, Genotype, Hypoxia) %>%
+  dplyr::filter(Hypoxia == 0) %>%
+  dplyr::filter(Age == 24) %>%
+  dplyr::select(-Hypoxia) %>%
+  dplyr::mutate(Genotype = gsub(x = Genotype, 
+                                pattern = "wt", 
+                                replacement = "WT")) %>%
+  bind_rows(mouseData$samples %>%
+              rownames_to_column("samplename")%>%
+              dplyr::select(samplename, age, genotype) %>%
+              dplyr::rename(sample = samplename,
+                            Age = age,
+                            Genotype = genotype) %>%
+              dplyr::filter(Age == 11))%>%
+  bind_rows(fADData$samples %>%
+              dplyr::select(geo_accession, age, group) %>%
+              dplyr::rename(sample = geo_accession,
+                            Age = age,
+                            Genotype = group)) %>%
+  dplyr::rename(Group = Genotype)%>%
+  dplyr::mutate(Dataset = c(rep("Zebrafish", 8), 
+                            rep("Mouse", 6),
+                            rep("Human", 21)))
+            
+```
+
+- PCA
+
+```{r}
+pcaAll <- allData %>% column_to_rownames("human_ensembl") %>%
+  as.matrix %>%  t %>%prcomp(scale=TRUE)
+
+summary(pcaAll) # PC1 63.2%, PC2 27.3%
+
+pcaAll_plot <- pcaAll$x %>%
+  as.data.frame %>%
+  dplyr::select(PC1, PC2) %>%
+  rownames_to_column("sample") %>%
+  right_join(allSample, by = "sample")%>%
+  ggplot(aes(x = PC1, y = PC2,colour = Dataset)) +
+  geom_point(alpha=0.5)+
+  theme(aspect.ratio =1) +
+  labs(x = "Principal Component 1 (63.2%)", 
+       y = "Principal Component 2 (27.3%)")
+
+pcaAll_plot
+
+pcaAll_plot%>% export::graph2pdf(here("data", "datasets", "fad", "fig", 
+                                      "pca_withMouseZeb.pdf"))
+```
+

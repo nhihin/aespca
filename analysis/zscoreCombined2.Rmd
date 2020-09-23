@@ -298,7 +298,7 @@ zebAndMouse <- combinedPC1_zebMouse %>% as.data.frame %>%
   )) %>%
   dplyr::mutate(group = as.factor(group)) %>%
   dplyr::select(-genotype, -age)
-zebAndMouse$group %<>% relevel("wt")
+zebAndMouse$group %<>% relevel(wflow_"wt")
 
 zebAndMouse <- zebAndMouse %>%
   melt(id.vars = c("Sample", "group", "dataset")) # %>%

@@ -110,6 +110,7 @@ c7_mapped <- readRDS(file.path(genesetsDir, "ens_c7_mapped.rds"))
 
 ```{r}
 kegg_mapped <- c2_mapped[(names(c2_mapped) %>% str_detect("KEGG"))]
+
 ```
 
 ## 1.2. IRE Genes

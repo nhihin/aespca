@@ -1,0 +1,367 @@
+---
+title: "AES-PCA Loadings - Figures"
+author: "Nhi Hin"
+date: "2020-08-06"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+# Load packages:
+library(here)
+library(magrittr)
+library(dplyr)
+library(biomaRt)
+library(AnnotationHub)
+library(purrr)
+library(tidyr)
+library(org.Mm.eg.db)
+library(org.Dr.eg.db)
+library(ggplot2)
+library(export)
+```
+
+
+## Introduction
+
+- AES-PCA was run for the fAD-like and 5XFAD mouse model datasets, 
+returning the sparse PC values (PC1 and PC2) as well as gene loadings 
+for these.
+
+- Here, we will further explore the differences in the genes contributing to the 
+variation across PC1 (gene loadings).
+
+## 1. Import Data
+
+- The AES-PCA loadings for PC1 were saved in the `pathwayPCA-mouse.Rmd` and 
+`pathwayPCA-zebrafish.Rmd` documents. Here we will load in the saved objects.
+
+```{r}
+loadings_zeb <- readRDS(here("data", "datasets", "zebrafish", 
+                              "geneLoadings.rds"))
+
+loadings_mouse <-  readRDS(here("data", "datasets", "mouse", "GSE140286", 
+                              "geneLoadings.rds"))
+```
+
+- Confirm that the same gene sets are in the datasets.
+
+```{r}
+names(loadings_zeb$q96VsWT_6mth) %in% names(loadings_mouse$XFADVsWT_3mth)
+```
+
+- There is one `FALSE` indicating a mismatch (spelling mistake) from using 
+different versions of MSigDB Hallmark gene sets for zebrafish and mouse. 
+
+```{r}
+names(loadings_zeb$q96VsWT_6mth)[!names(loadings_zeb$q96VsWT_6mth) %in% names(loadings_mouse$XFADVsWT_3mth)]
+
+loadings_mouse$XFADVsWT_3mth$HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY
+```
+
+```{r}
+names(loadings_zeb$q96VsWT_6mth) %<>%
+  gsub(x = ., pattern = "HALLMARK_REACTIVE_OXIGEN_SPECIES_PATHWAY", 
+       replacement = "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+
+names(loadings_zeb$q96vsWT_24mth) %<>%
+  gsub(x = ., pattern = "HALLMARK_REACTIVE_OXIGEN_SPECIES_PATHWAY", 
+       replacement = "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+```
+
+- Import in the Gene Set enrichment analysis results indicating the 
+gene sets found to be significant in each comparison of each
+dataset.
+
+```{r}
+zebResults <- readRDS(here("data", "datasets", "zebrafish", 
+                             "gsea.rds"))
+
+mouseResults <- readRDS(here("data", "datasets", "mouse", 
+                            "GSE140286", "gsea.rds"))
+```
+
+
+## 2. Zebrafish Dataset
+
+- The significantly enriched gene sets (determined from previous gene 
+set analysis) will have their AES-PC1 values plotted below. 
+
+- Note: As AES-PCA creates sparse PCAs, the loadings of many of the genes will 
+have been set to 0. 
+
+- **Young zebrafish (6 months old)**
+
+```{r}
+# Gene sets which were significantly enriched in the young 
+# fAD-like mutant vs wt comparison
+sigInYoungZeb <- zebResults$combTest$normoxia_6mth_mutant_vs_wt %>%
+  dplyr::filter(fdr < 0.05)
+
+loadingsPlot_youngZeb <- loadings_zeb$q96VsWT_6mth %>% bind_rows(.id = "Geneset") %>% 
+  dplyr::distinct(Geneset, gene_id, PC1, 
+                  gene_name, .keep_all = TRUE) %>% 
+  dplyr::filter(Geneset %in% sigInYoungZeb$Geneset)%>%
+  dplyr::arrange(Geneset, PC1) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " ")) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK",
+                               replacement = "")) %>%
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)), y = PC1)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~Geneset, scales = "free_y", ncol= 3) +
+  coord_flip()+
+  theme(aspect.ratio = 1) +
+  labs(y = "PC1", x = "Gene loadings")
+
+loadingsPlot_youngZeb
+```
+
+- **Aged zebrafish (24 months old)**
+
+```{r}
+sigInAgedZeb <- zebResults$combTest$normoxia_24mth_mutant_vs_wt %>%
+  dplyr::filter(fdr < 0.05)
+
+loadingsPlot_agedZeb <- loadings_zeb$q96vsWT_24mth %>% 
+  bind_rows(.id = "Geneset") %>% 
+  dplyr::distinct(Geneset, gene_id, PC1, 
+                  gene_name, .keep_all = TRUE) %>% 
+  dplyr::filter(Geneset %in% sigInAgedZeb$Geneset)%>%
+  dplyr::arrange(Geneset, PC1) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " ")) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK",
+                               replacement = "")) %>%
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)), y = PC1)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~Geneset, scales = "free_y", ncol= 3) +
+  coord_flip()+
+  theme(aspect.ratio = 1) +
+  labs(y = "PC1", x = "Gene loadings")
+
+loadingsPlot_agedZeb
+```
+
+## 3. Mouse Dataset
+
+- **Young mice (3 months old)**
+
+```{r}
+sigInYoungMice <- mouseResults$combTest$effectOf5XFAD_3mth %>%
+  dplyr::filter(fdr < 0.05) 
+
+loadingsPlot_youngMice <- loadings_mouse$XFADVsWT_3mth %>% 
+  bind_rows(.id = "Geneset") %>% 
+  dplyr::distinct(Geneset, gene_id, PC1, 
+                  gene_name, .keep_all = TRUE) %>% 
+  dplyr::filter(Geneset %in% sigInYoungMice$Geneset)%>%
+  dplyr::arrange(Geneset, PC1) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " ")) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK",
+                               replacement = "")) %>%
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)), y = PC1)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~Geneset, scales = "free_y", nrow=3) +
+  coord_flip()+
+  #theme(aspect.ratio = 1) +
+  labs(y = "PC1", x = "Gene loadings")
+
+loadingsPlot_youngMice
+```
+
+- **Aged mice (12 months old)**
+
+```{r}
+sigInAgedMice <- mouseResults$combTest$effectOf5XFAD_12mth %>%
+  dplyr::filter(fdr < 0.05) 
+
+loadingsPlot_agedMice <- loadings_mouse$XFADvsWT_12mth %>% 
+  bind_rows(.id = "Geneset") %>% 
+  dplyr::distinct(Geneset, gene_id, PC1, 
+                  gene_name, .keep_all = TRUE) %>% 
+  dplyr::filter(Geneset %in% sigInAgedMice$Geneset)%>%
+  dplyr::arrange(Geneset, PC1) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " ")) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK",
+                               replacement = "")) %>%
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)), y = PC1)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~Geneset, scales = "free_y", ncol= 3) +
+  coord_flip()+
+  #theme(aspect.ratio = 1) +
+  labs(y = "PC1", x = "Gene loadings")
+
+loadingsPlot_agedMice
+```
+
+## 4. Gene sets enriched in both datasets
+
+- Import in the conserved genes to see if these overlap with the common 
+gene sets. 
+
+```{r}
+conservedGenes <-  readRDS(here("data", "loadings", 
+                                "conservedGenes_young.rds"))
+```
+
+
+```{r}
+sigInYoungAll <- sigInYoungZeb %>%
+  full_join(sigInYoungMice, by = c("Geneset"))%>%
+  dplyr::filter(!is.na(id.x) , !is.na(id.y)) %>%
+  .$Geneset
+
+loadingsPlot_youngCommon <- list(Zebrafish = loadings_zeb$q96VsWT_6mth, 
+                              Mouse = loadings_mouse$XFADVsWT_3mth) %>%
+  lapply(function(x){
+    x %>%
+      bind_rows(.id = "Geneset") %>%
+      dplyr::distinct(Geneset, gene_id, PC1, gene_name, .keep_all = TRUE) %>%
+      dplyr::filter(Geneset %in% sigInYoungAll) %>%
+      dplyr::arrange(Geneset)
+  }) %>%
+  bind_rows(.id = "Dataset") %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "_",
+                               replacement = " ")) %>%
+  dplyr::mutate(Geneset = gsub(x = Geneset, 
+                               pattern = "HALLMARK",
+                               replacement = "")) 
+loadingsPlot_youngCommon
+
+theme_set(theme_bw(base_size = 16))
+
+geneset1 <- loadingsPlot_youngCommon %>%
+  dplyr::filter(Geneset %in% c(" EPITHELIAL MESENCHYMAL TRANSITION")) %>% 
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)),
+             y = PC1)) +
+  geom_col(position = position_dodge2(preserve = "single", width=0.3)) +
+  facet_grid(~Geneset + Dataset, scales = "free_x") +
+  coord_flip() +
+  theme(aspect.ratio=1)+
+  labs(y = "PC1", x = "Gene loadings") 
+  
+geneset1 %>% export::graph2pdf(here("data", "loadings", "fig", "geneset1.pdf"))
+geneset1 %>% export::graph2ppt(here("data", "loadings", "fig", "geneset1"))
+
+###
+geneset2 <- loadingsPlot_youngCommon %>%
+  dplyr::filter(Geneset %in% c(" FATTY ACID METABOLISM")) %>% 
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)),
+             y = PC1)) +
+  geom_col(position = position_dodge2(preserve = "single")) +
+  facet_grid(~Geneset + Dataset, scales = "free_x") +
+  coord_flip() +
+  theme(aspect.ratio=0.5)+
+  labs(y = "PC1", x = "Gene loadings") 
+  
+geneset2 %>% export::graph2pdf(here("data", "loadings", "fig", "geneset2.pdf"))
+geneset2 %>% export::graph2ppt(here("data", "loadings", "fig", "geneset2"))
+
+###
+geneset3 <- loadingsPlot_youngCommon %>%
+  dplyr::filter(Geneset %in% c(" HEME METABOLISM")) %>% 
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)),
+             y = PC1)) +
+  geom_col(position = position_dodge2(preserve = "single")) +
+  facet_grid(~Geneset + Dataset, scales = "free_x") +
+  coord_flip() +
+  theme(aspect.ratio=0.5)+
+  labs(y = "PC1", x = "Gene loadings") 
+  
+geneset3 %>% export::graph2pdf(here("data", "loadings", "fig", "geneset3.pdf"))
+geneset3 %>% export::graph2ppt(here("data", "loadings", "fig", "geneset3"))
+
+###
+geneset4 <- loadingsPlot_youngCommon %>%
+  dplyr::filter(Geneset %in% c(" PI3K AKT MTOR SIGNALING")) %>% 
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)),
+             y = PC1)) +
+  geom_col(position = position_dodge2(preserve = "single")) +
+  facet_grid(~Geneset + Dataset, scales = "free_x") +
+  coord_flip() +
+  theme(aspect.ratio=0.5)+
+  labs(y = "PC1", x = "Gene loadings") 
+  
+geneset4 %>% export::graph2pdf(here("data", "loadings", "fig", "geneset4.pdf"))
+geneset4 %>% export::graph2ppt(here("data", "loadings", "fig", "geneset4"))
+
+###
+geneset5 <- loadingsPlot_youngCommon %>%
+  dplyr::filter(Geneset %in% c(" PROTEIN SECRETION")) %>% 
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)),
+             y = PC1)) +
+  geom_col(position = position_dodge2(preserve = "single")) +
+  facet_grid(~Geneset + Dataset, scales = "free_x") +
+  coord_flip() +
+  theme(aspect.ratio=0.5)+
+  labs(y = "PC1", x = "Gene loadings") 
+  
+geneset5 %>% export::graph2pdf(here("data", "loadings", "fig", "geneset5.pdf"))
+geneset5 %>% export::graph2ppt(here("data", "loadings", "fig", "geneset5"))
+
+###
+geneset6 <- loadingsPlot_youngCommon %>%
+  dplyr::filter(Geneset %in% c(" UV RESPONSE DN")) %>% 
+  ggplot(aes(x = factor(gene_name, levels = unique(gene_name)),
+             y = PC1)) +
+  geom_col(position = position_dodge2(preserve = "single")) +
+  facet_grid(~Geneset + Dataset, scales = "free_x") +
+  coord_flip() +
+  theme(aspect.ratio=0.5)+
+  labs(y = "PC1", x = "Gene loadings") 
+  
+geneset6 %>% export::graph2pdf(here("data", "loadings", "fig", "geneset6.pdf"))
+geneset6 %>% export::graph2ppt(here("data", "loadings", "fig", "geneset6"))
+
+
+```
+
+
+## Export Objects
+
+```{r eval=FALSE}
+loadingsPlot_youngZeb %>% export::graph2pdf(here("data", "loadings", 
+                                                 "fig", 
+                                                 "loadingsPlot_youngZeb.pdf"),
+                                            width = 8, height = 11)
+
+loadingsPlot_agedZeb %>% export::graph2pdf(here("data", "loadings", 
+                                                 "fig", 
+                                                 "loadingsPlot_agedZeb.pdf"),
+                                            width = 8, height = 23)
+
+loadingsPlot_youngMice %>% export::graph2pdf(here("data", "loadings", 
+                                                 "fig", 
+                                                 "loadingsPlot_youngMice.pdf"),
+                                            width = 8, height = 11)
+
+loadingsPlot_agedMice %>% export::graph2pdf(here("data", "loadings", 
+                                                 "fig", 
+                                                 "loadingsPlot_agedMice.pdf"),
+                                            width = 8, height = 23)
+
+loadingsPlot_youngCommon %>% export::graph2pdf(here("data", "loadings",
+                                                    "fig", 
+                                              "loadingsPlot_youngCommon.pdf"),
+                                              width = 8, height = 11)
+
+loadingsPlot_youngCommon %>% export::graph2ppt(here("data", "loadings",
+                                                    "fig", 
+                                              "loadingsPlot_youngCommon"),
+                                              width = 8, height = 11)
+```
+
+

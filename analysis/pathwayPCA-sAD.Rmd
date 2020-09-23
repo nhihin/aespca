@@ -152,14 +152,14 @@ omics_genotype_t <- CreateOmics(
   respType = "categ"
 )
 # Create another one for the IRE sets
-omics_genotype_t_ire <- CreateOmics(
-  assayData_df = tidyDat_t,
-  pathwayCollection_ls = ireCol,
-  response = samples_genotype_t,
-  respType = "categ"
-)
-omics_genotype_t_ire %>% saveRDS(here("data","datasets", "mayo", 
-                                      "omics_genotype_t_ire.rds"))
+# omics_genotype_t_ire <- CreateOmics(
+#   assayData_df = tidyDat_t,
+#   pathwayCollection_ls = ireCol,
+#   response = samples_genotype_t,
+#   respType = "categ"
+# )
+# omics_genotype_t_ire %>% saveRDS(here("data","datasets", "mayo", 
+#                                       "omics_genotype_t_ire.rds"))
 
 # Perform enrichment testing using AES-PCA
 test_genotype_t <- AESPCA_pVals(
@@ -229,12 +229,507 @@ sigSets_c <- test_genotype_c$pVals_df %>%
 sigSets_c
 ```
 
-### 5. Plots
+a### 5. Patient Clustering
 
-- Violin plot of the IRE gene sets
+- We will perform clustering on the patients. 
+
+- First format the data.frame into a wide form so it's a samples by 
+gene sets matrix. 
 
 ```{r}
+# Format dataframe into wide form suitable for PCA
+PC1_TCsamples <- test_genotype_t$PCs_ls %>% 
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_t$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "pathway") %>%
+  dplyr::select(-V2) %>%
+  dcast(Sample ~ pathway, value.var = "V1") %>% 
+  column_to_rownames("Sample")
 
+head(PC1_TCsamples)
+```
+
+- Perform a quick PCA to see whether there is separation between the 
+controls and AD just based on their PC1 values.
+
+```{r}
+# Perform just normal PCA
+PCA_TCsamples <- PC1_TCsamples %>% prcomp()
+
+PCAplot_TCsamples <- PCA_TCsamples$x %>% 
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=PC1, y = PC2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "red")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (82.5%)",
+         y = "Principal Component 2 (10.6%)", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+PCAplot_TCsamples
+```
+
+- We can see there is some mild separation, although overall the dataset 
+is quite noisy / the disease is quite heterogenous. 
+
+- There also seems to be some correlation between ApoE genotype and the 
+Diagnosis, which is expected as the ApoE4 allele has been well known to 
+predispose to AD. 
+
+- This is confirmed with a Fisher's exact test (p = 7.74e-07) indicating 
+a strong correlation between ApoE allele and an AD diagnosis. 
+
+```{r}
+conting <- samples %>%
+  dplyr::filter(Tissue == "TemporalCortex", Diagnosis %in% c("AD", "Control")) %>%
+  dplyr::group_by(Diagnosis, ApoE) %>%
+  dplyr::summarise(n = n()) %>%
+  ungroup() %>%
+  dplyr::mutate(Diagnosis = as.factor(as.character(Diagnosis)),
+                ApoE = as.factor(as.character(ApoE))) %>% 
+  dcast(Diagnosis ~ ApoE, value.var = "n")
+
+# Replace NAs in the contingency matrix with zero
+conting[is.na(conting)] <- 0
+
+# conting2 <- conting %>%
+#   mutate(Allele2 = `23` + `24`,
+#          Allele3 = `23` + `33` + `34`,
+#          Allele4 = `34` + `44`) %>%
+#   dplyr::select(Cluster, Allele2, Allele3, Allele4)
+
+conting %<>% column_to_rownames("Diagnosis")
+
+fisher.test(conting, simulate.p.value = FALSE) 
+```
+
+- Let's also examine effects of age as well. 
+
+```{r}
+ageCor <- samples %>%
+  dplyr::filter(Tissue == "TemporalCortex", 
+                Diagnosis %in% c("AD", "Control")) %>%
+    dplyr::select(Sample, AgeAtDeath, Diagnosis) %>%
+  # Create a dummy variable for Diagnosis which is a factor 
+  # so that we can calculate correlation. 
+  dplyr::mutate(Diagnosis = case_when(
+    Diagnosis == "AD" ~ 1,
+    Diagnosis == "Control" ~ 0
+  ))
+cor.test(x = ageCor$AgeAtDeath, y = ageCor$Diagnosis, 
+         method = "pearson")
+```
+
+- Makes sense that there is not a significant correlation between age 
+and Diagnosis as this study has tried to get approx. equal number of 
+control and disease samples. 
+
+#### 5.1. How many clusters
+
+- Although PCA found some mild separation, we didn't see clear clusters or 
+subsets of patients in the PCA. It is possible that these didn't show up 
+as the relationship between the data is non-linear. To test this we 
+will try t-SNE to see if any groupings show up. 
+
+- As t-SNE is sensitive to the perplexity parameter, we will try different 
+perplexities. 
+
+```{r }
+tsne_TCsamples <- list()
+perplexitiesToTest <- c(5, 10, 20)
+
+for(n in perplexitiesToTest){
+  tsne_TCsamples[[n]] <-  Rtsne(PC1_TCsamples, 
+                        dims = 2, 
+                        perplexity= n, 
+                        verbose=TRUE, 
+                        theta = 0,
+                        max_iter = 1e5)
+}
+
+# tsne_TCsamples %>% saveRDS(here("data", "datasets", "mayo", 
+#                                 "tsne_iter1e5.rds"))
+```
+
+- We will plot the different t-SNEs below. 
+
+```{r}
+# tsne_TCsamples <- readRDS(here("data", "datasets", "mayo",
+#                                 "tsne_TCsamples.rds"))
+
+# 5 distinct clusters, although there are AD and controls within each
+tsne_TCsamples[[5]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+# 4-5 main groupings, some separation of AD and controls 
+tsne_TCsamples[[10]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+# This is probably too high of a value as it is mainly the global 
+# structure. One main blob
+tsne_TCsamples[[20]]$Y %>%
+  as.data.frame %>%
+  set_colnames(c("Dim1", "Dim2")) %>%
+  set_rownames(rownames(PC1_TCsamples)) %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  ggplot(aes(x=Dim1, y = Dim2, 
+             colour = Diagnosis, 
+             shape = ApoE)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,16,17,18,8)) +
+  scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Dim 1",
+         y = "Dim 2", 
+         colour = "Diagnosis", shape = "ApoE\nGenotype") 
+
+
+```
+
+- Overall, it would seem that there are 4-5 clusters/groups in the data. 
+
+- Prior to clustering, we need to scale the data to be zero mean and unit 
+variance (standardisation). 
+
+```{r}
+# Standardisation
+scaleData <- function(x){
+  x <- as.matrix(x)
+  mean <- mean(x)
+  sd <- sd(x)
+  
+  scaled_x <- (x-mean)/sd
+  return(scaled_x)
+}
+
+scaled_PC1 <- scaleData(PC1_TCsamples)
+```
+
+#### 5.2. K-means clustering with bootstraps
+
+- In the *fpc* package, the function `clusterboot` uses bootstrapping to 
+run clustering algorithms multiple times and determine cluster stability. 
+
+- Here, we run `clusterboot` with the default `bootmethod = boot`, along with 
+`k means` clustering with number of `k = 3-5`. We will run 1000 bootstraps 
+(`B=1000`).
+
+```{r}
+library(fpc)
+
+kTotest <- c(3,4,5)
+
+clusteringRes <- list()
+for(n in kTotest){
+  clusteringRes[[n]] <-  clusterboot(scaled_PC1, 
+                        B = 1000,
+                        clustermethod = kmeansCBI,
+                        krange = n,
+                        seed = 123)
+}
+
+clusteringRes # Only with k=3 is the Jaccard index > 0.8 
+#               indicating stable clusters
+
+
+clustersPC1 <- clusteringRes[[3]]$partition %>% as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  set_colnames(c("Sample", "Cluster"))
+
+# clustersPC1 %>% saveRDS(here("data", "datasets", "mayo", 
+#                              "km_clusters3_PC1.rds"))
+
+# clusters_PC1 %>% saveRDS(here("data", "datasets", "mayo", "clusters_PC1.rds"))
+# clusters_PC1 %>% saveRDS(here("data", "datasets", "mayo", "clusters_PC1.rds"))
+# clusters_PC1 <- readRDS(here("data", "datasets", "mayo", "clusters_PC1.rds"))
+# clustersPC1 <- clusters_PC1$partition %>% as.data.frame %>%
+#   rownames_to_column("Sample") %>%
+#   set_colnames(c("Sample", "Cluster"))
+```
+
+- The Jaccard index indicates how stable a cluster is:
+
+<blockquote>
+As a rule of thumb, clusters with a stability value less than 0.6 
+should be considered unstable. Values between 0.6 and 0.75 indicate that 
+the cluster is measuring a pattern in the data, but there isn’t high certainty 
+about which points should be clustered together. Clusters with stability 
+values above about 0.85 can be considered highly stable (they’re 
+likely to be real clusters).
+</blockquote>
+
+- Heatmap
+
+```{r}
+heatmapplot <- PC1_TCsamples %>% 
+  rownames_to_column("Sample") %>% 
+  left_join(clustersPC1) %>%
+  left_join(samples[, c("Sample", "Diagnosis")], by = "Sample")%>%
+  dplyr::arrange(Cluster, Diagnosis) %>%
+  dplyr::select(-Cluster, -Diagnosis) %>%
+  column_to_rownames("Sample") %>% t 
+
+rownames(heatmapplot) <- gsub(x = rownames(heatmapplot),
+                              pattern = "HALLMARK_",
+                              replacement = "") %>%
+  gsub(x = ., pattern = "_", replacement = " ")
+
+palette <- colorRampPalette(c("#10c1e5", "#82e0b4",
+                              "#F9F9F9", "#FBB829", "#FF0066"))(100)
+
+heatmapAnnot <- clustersPC1%>% as.data.frame%>%
+  set_rownames(.$Sample) %>%
+  magrittr::extract(colnames(heatmapplot),) %>%
+  rownames_to_column("Sample2") %>%
+  dplyr::select(-Sample) %>%
+  dplyr::rename(Sample = Sample2) %>%
+  left_join(samples[, c("Sample", "Diagnosis", "AgeAtDeath", "ApoE")]) %>%
+  dplyr::mutate(Cluster = gsub(x = Cluster,
+                               pattern = "^(.*)$",
+                               replacement = "Cluster_\\1"))%>%
+  column_to_rownames("Sample") 
+
+colourAnnotation = list(
+  Diagnosis = c(Control = "#cccccc", 
+                AD = "red"),
+  Cluster = c(Cluster_1 = "LightPink", 
+              Cluster_2 = "LightGreen",
+              Cluster_3 = "LightSkyBlue") ,
+  ApoE = c("23" = "Turquoise",
+           "24" = "MediumBlue",
+           "33" = "yellow",
+           "34" = "orange",
+           "44" = "purple")
+)
+
+plotHeatmap <- pheatmap::pheatmap(heatmapplot, 
+                   cluster_cols = FALSE,
+                   scale = "row",
+                   color = palette,
+                   annotation_colors = colourAnnotation,
+                   annotation_col = heatmapAnnot)
+
+# heatmapAnnot %>% saveRDS(here("data", "datasets", "mayo","heatmapAnnot_b.rds"))
+plotHeatmap %>% save_pheatmap_pdf(here("data", "datasets", "mayo", "fig",
+                                       "heatmap_PC1_b_V2.pdf"))
+```
+
+- Also a PCA
+
+```{r}
+PCA_TCsamples <- scaled_PC1 %>% prcomp()
+
+PCAplot_TCsamples_clusters <- PCA_TCsamples$x %>% 
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(samples[, c("Sample",
+                        "Sex",
+                        "AgeAtDeath",
+                        "ApoE",
+                        "Diagnosis")], by = "Sample")%>%
+  left_join(clustersPC1, by = "Sample") %>%
+  ggplot(aes(x=PC1, y = PC2, 
+             colour = as.factor(Cluster), 
+             shape = Diagnosis)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,7)) +
+  #scale_colour_manual(values = c("#999999", "orangered")) +
+  #scale_color_distiller(palette = "PuRd") +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (82.5%)",
+         y = "Principal Component 2 (10.6%)", 
+         colour = "Cluster", shape = "Diagnosis") 
+
+PCAplot_TCsamples_clusters
+```
+
+- With the familial AD dataset on the PCA also:
+
+```{r}
+# Antonell et al. dataset
+samples_fAD <- readRDS(here("data", "datasets", "fad", "samples.rds")) %>%
+  dplyr::mutate(Cluster = "fAD Dataset") %>%
+  dplyr::select(Sample, Cluster, hasAD, age, apoe) %>%
+  dplyr::rename(Diagnosis = hasAD,
+                AgeAtDeath = age,
+                ApoE = apoe) %>%
+  dplyr::mutate(ApoE = gsub(x = ApoE, pattern = "_", replacement = ""),
+                Diagnosis = case_when(
+                  Diagnosis == TRUE ~ "AD",
+                  Diagnosis == FALSE ~ "Control"
+                ))
+pc1_fAD <- readRDS(here("data", "datasets", 
+                                "fad", "PC1_allSamples.rds"))
+
+pc1_fAD_scaled <- scaleData(pc1_fAD)
+
+combinedScaledPC1 <- rbind(scaled_PC1, pc1_fAD_scaled)
+
+combinedSamples <- heatmapAnnot %>%
+  rownames_to_column("Sample") %>%
+  dplyr::mutate(Cluster = case_when(
+    Cluster == 1 ~ "sAD Dataset (Cluster 1)",
+    Cluster == 2 ~ "sAD Dataset (Cluster 2)",
+    Cluster == 3 ~ "sAD Dataset (Cluster 3)"
+  ))%>%
+  bind_rows(samples_fAD)
+
+# PCA
+combinedPCA <- prcomp(combinedScaledPC1)
+summary(combinedPCA)
+
+combinedPCAPlot <- combinedPCA$x %>% 
+  magrittr::extract(, c("PC1", "PC2")) %>%
+  as.data.frame %>%
+  rownames_to_column("Sample") %>%
+  left_join(combinedSamples, by = "Sample")%>%
+  ggplot(aes(x=PC1, y = PC2, 
+             colour = as.factor(Cluster), 
+             shape = Diagnosis)) +
+  geom_point(alpha = 0.6,size=3) +
+  scale_shape_manual(values = c(15,1)) +
+  #scale_colour_manual(values = c("#999999", "orangered")) +
+  theme(aspect.ratio = 1) +
+    labs(x = "Principal Component 1 (75.6%)",
+         y = "Principal Component 2 (10.5%)", 
+         colour = "Cluster", shape = "Diagnosis") 
+
+
+combinedPCAPlot
+
+#combinedPCAPlot %>% export::graph2pdf(here("data", "PC1", "fig", "pca.pdf"))
+```
+
+
+#### 5.3. IRE patterns in clusters
+
+- Now that we have clusters, another interesting question is whether the 
+IRE gene sets show differential patterns across the different clusters. 
+
+```{r}
+ire_comparisons <- list(c("Control", "AD"))
+violin_ire_plot <- test_genotype_t_ire$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "geneset") %>%
+  left_join(samples, by = "Sample") %>%
+  left_join(clustersPC1, by = "Sample") %>%
+  ggpubr::ggviolin(x = "Diagnosis", y = "V1",
+                    fill = "Diagnosis", add = "boxplot",
+                   add.params = list(fill = "white"),
+                   palette = c("#dddddd", "orangered")) +
+  ggpubr::stat_compare_means(comparisons = ire_comparisons,
+                             method = "t.test")+
+  #ggpubr::stat_compare_means()  +
+  facet_wrap(~geneset + Cluster, scales = "free_y",ncol = 3) +
+  labs(y = "PC1 Value")
+violin_ire_plot
+
+violin_ire_plot %>% export::graph2pdf(here("data", "datasets", "mayo", "fig", "ireBoxplots.pdf"), height = 11, width = 8)
+```
+
+- Interestingly, we see that 
+
+- This can be contrasted to when plotting all clusters together; only 
+the `ire3_hq` set has a significant difference between the controls and AD 
+(at 0.05 significance level). 
+
+```{r}
+ire_comparisons <- list(c("Control", "AD"))
+violin_ire_plot2 <- test_genotype_t_ire$PCs_ls %>%
+  lapply(function(x){
+    x %>% set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
+      rownames_to_column("Sample")
+  }) %>%
+  bind_rows(.id = "geneset") %>%
+  left_join(samples, by = "Sample") %>%
+  left_join(clustersPC1, by = "Sample") %>%
+  ggpubr::ggviolin(x = "Diagnosis", y = "V1",
+                    fill = "Diagnosis", add = "boxplot",
+                   add.params = list(fill = "white"),
+                   palette = c("#dddddd", "orangered")) +
+  ggpubr::stat_compare_means(comparisons = ire_comparisons,
+                             method = "t.test")+
+  #ggpubr::stat_compare_means()  +
+  facet_wrap(~geneset, scales = "free_y",ncol = 2) +
+  labs(y = "PC1 Value")
+violin_ire_plot2
+
+violin_ire_plot2 %>% export::graph2pdf(here("data", "datasets", "mayo", "fig", "ireBoxplots_allClust.pdf"), height = 11/4*2, width = 8/3*2)
+```
+
+
+
+
+
+### 6. Plots
+
+#### 6.1. Violin plot of the IRE gene sets
+
+- We also used AES-PCA on the IRE gene sets defined based on the human 
+transcriptome. 
+
+- The results were significant when comparing AES PC1 values between 
+control and AD. We will plot violin plots to show how the distributions 
+differ between control and AD below, for each gene set. 
+
+```{r}
 ire_comparisons <- list(c("Control", "AD"))
 violin_ire_plot <- test_genotype_t_ire$PCs_ls %>%
   lapply(function(x){
@@ -251,9 +746,12 @@ violin_ire_plot <- test_genotype_t_ire$PCs_ls %>%
   #ggpubr::stat_compare_means()  +
   facet_wrap(~geneset, scales = "free_y") +
   labs(y = "PC1 Value")
+violin_ire_plot
+```
 
-violin_ire_plot %>% export::graph2pdf(here("data", "datasets", 
-                                           "mayo", "fig", "violin_ire_plot.pdf"))
+```{r OLDCODE, eval=FALSE}
+# violin_ire_plot %>% export::graph2pdf(here("data", "datasets", 
+#                                            "mayo", "fig", "violin_ire_plot.pdf"))
 
 # test_genotype_t_ire$PCs_ls$ire3_all %>% 
 #   set_rownames(attributes(test_genotype_t_ire$PCs_ls)$sampleIDs) %>%
@@ -296,21 +794,7 @@ violin_ire_plot %>% export::graph2pdf(here("data", "datasets",
 #   ggtitle("Temporal Cortex: High quality 3' IREs")
 ```
 
-```{r}
-test_genotype_c$PCs_ls$HALLMARK_OXIDATIVE_PHOSPHORYLATION %>% 
-  set_rownames(attributes(test_genotype_c$PCs_ls)$sampleIDs) %>%
-  rownames_to_column("Sample") %>%
-  left_join(samples, by = "Sample") %>%
-  ggplot(aes(x = V1, fill = Diagnosis, colour = AgeAtDeath)) + 
-  geom_histogram(bins = 20, position = "identity", alpha=0.5) +
-  labs(x = "PC1 value for each sample",
-       y = "Count", 
-       fill = "Has AD?") +
-  scale_fill_manual(values = c("MediumTurquoise", "orangered")) +
-  scale_colour_manual(values = c("black", "yellow"))+
-  ggtitle("Cerebellum: Oxidative Phosphorylation")
-```
-
+#### 6.2. Hallmark boxplots
 
 - All 50 of the Hallmark gene sets will be plotted below. 
 
@@ -784,14 +1268,14 @@ testclust2 <- testclust$cluster%>%
 
 ```
 
-## Association between ApoE and Cluster
+### 7. Association between ApoE and Cluster
 
 - Not really an association between ApoE and cluster. 
 
 ```{r}
 conting <- samples %>%
   dplyr::filter(Tissue == "TemporalCortex", Diagnosis %in% c("AD", "Control")) %>%
-  left_join(clusters_km, by = "Sample")%>%
+  left_join(clustersPC1, by = "Sample")%>%
   dplyr::group_by(Cluster, ApoE) %>%
   dplyr::summarise(n = n()) %>%
   ungroup() %>%
@@ -811,7 +1295,7 @@ conting <- samples %>%
 
 conting[is.na(conting)] <- 0
 
-# conting2 <- conting %>% 
+# conting2 <- conting %>%
 #   mutate(Allele2 = `23` + `24`,
 #          Allele3 = `23` + `33` + `34`,
 #          Allele4 = `34` + `44`) %>%
@@ -820,34 +1304,42 @@ conting[is.na(conting)] <- 0
 conting %<>% column_to_rownames("Cluster")
 # conting2 %<>% column_to_rownames("Cluster")
 
-fisher.test(conting, simulate.p.value = TRUE, B = 1e5) 
+fisher.test(conting, simulate.p.value = TRUE) 
 
 ```
 
-Different ages between clusters?
+### 8. Different ages between clusters?
+
+- No significant association between age and cluster. 
 
 ```{r}
+ageComparisons <- list(c("Control", "AD"))
 samples %>% 
   dplyr::filter(Diagnosis %in% c("AD", "Control"), 
                 Tissue == "TemporalCortex")%>%
-  left_join(clusters_km, by = "Sample")%>%
+  left_join(clustersPC1, by = "Sample")%>%
   dplyr::group_by(Cluster, AgeAtDeath, Diagnosis) %>%
   dplyr::summarise(n = n())%>%
   ungroup() %>%
   dplyr::mutate(Cluster = as.factor(as.character(Cluster))) %>%
-  ggplot(aes(x = Cluster, y = AgeAtDeath, colour = Diagnosis)) +
-  geom_boxplot() 
+  ggplot(aes(x = Diagnosis, y = AgeAtDeath, colour = Diagnosis)) +
+  geom_boxplot() +
+  ggpubr::stat_compare_means(comparisons = ire_comparisons, 
+                             method = "t.test") +
+  facet_wrap(~Cluster)
+# 
+# samples %>%
+#   left_join(mayo_samples[, c("SampleID", "AgeAtDeath", "ApoE", "Diagnosis")], 
+#             by = c("Sample"="SampleID")) %>%
+#   dplyr::group_by(Cluster, AgeAtDeath, Diagnosis) %>%
+#   dplyr::summarise(n = n())%>%
+#   ungroup() %>%
+#   dplyr::mutate(Cluster = as.factor(as.character(Cluster))) %>%
+#   ggplot(aes(x = Cluster, y = AgeAtDeath, colour = Diagnosis)) +
+#   geom_boxplot() 
 
-samples %>%
-  left_join(mayo_samples[, c("SampleID", "AgeAtDeath", "ApoE", "Diagnosis")], 
-            by = c("Sample"="SampleID")) %>%
-  dplyr::group_by(Cluster, AgeAtDeath, Diagnosis) %>%
-  dplyr::summarise(n = n())%>%
-  ungroup() %>%
-  dplyr::mutate(Cluster = as.factor(as.character(Cluster))) %>%
-  ggplot(aes(x = Cluster, y = AgeAtDeath, colour = Diagnosis)) +
-  geom_boxplot() 
 ```
+
 
 
 

@@ -65,9 +65,9 @@ keggGenes <- readRDS(here("data", "datasets", "fad",
                           "genesets", "kegg_mapped.rds"))
 ireGenes <- readRDS(here("data", "ireGenes", "human", "ireProbes.rds"))
 ireNames <- names(ireGenes)
-
-hallmarkGenes <- append(hallmarkGenes, ireGenes)
-keggGenes <- append(keggGenes, ireGenes)
+# 
+# hallmarkGenes <- append(hallmarkGenes, ireGenes)
+# keggGenes <- append(keggGenes, ireGenes)
 
 keggNames <- names(keggGenes)
 hallmarkNames <- names(hallmarkGenes)
@@ -238,7 +238,7 @@ test_AD <- AESPCA_pVals(
   adjustment = c("Holm", "BH")
 )
 
-test_AD <- readRDS(here("data", "datasets", "fad", "test_AD_fAD.rds"))
+# test_AD <- readRDS(here("data", "datasets", "fad", "test_AD_fAD.rds"))
 
 test_AD$pVals_df 
 
@@ -336,14 +336,18 @@ violin_ire_plot <- test_AD_ire$PCs_ls %>%
                     fill = "hasAD", add = "boxplot",
                    add.params = list(fill = "white"),
                    palette = c("#dddddd", "orangered")) +
-  ggpubr::stat_compare_means(comparisons = ire_comparisons)+
+  ggpubr::stat_compare_means(comparisons = ire_comparisons, method = "t.test")+
   #ggpubr::stat_compare_means()  +
-  facet_wrap(~geneset, scales = "free_y") +
-  labs(y = "PC1 Value")
+  facet_wrap(~geneset, scales = "free_y", ncol = 1) +
+  labs(y = "PC1 Value")+
+  theme(aspect.ratio = 1)
+violin_ire_plot
 
-violin_ire_plot %>% export::graph2pdf(here("data", "datasets", 
-                                           "fad", "fig", 
-                                           "violin_ire_plot"))
+
+violin_ire_plot %>% export::graph2pdf(here("data", "datasets",
+                                           "fad", "fig",
+                                           "violin_ire_plot"),
+                                           height = 11, width = 8/3)
 ```
 
 
